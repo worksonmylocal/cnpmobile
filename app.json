@@ -24,8 +24,29 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#f4f3ef"
+        }
+      ]
     ],
-    "backgroundColor": "#f4f3ef"
+    "backgroundColor": "#f4f3ef",
+    "owner": "worksonmylocals-team",
+    "extra": {
+      "eas": {
+        "projectId": "06b7be7c-8731-4607-a42b-bb19d69492cd"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/06b7be7c-8731-4607-a42b-bb19d69492cd"
+    }
   }
 }

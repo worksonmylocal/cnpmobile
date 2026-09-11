@@ -2,9 +2,13 @@ import { Feather } from "@expo/vector-icons";
 import {
   Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, useFonts,
 } from "@expo-google-fonts/poppins";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import {
+  SafeAreaProvider, useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { call, flushQueue, getQueue, login, writeCall } from "./src/api";
 import { clearSession, loadSession, Session } from "./src/auth";
 import { loadSettings, useSettings } from "./src/settings";
@@ -28,6 +32,11 @@ import { BackLink, BtnBig, FieldInput, Pill, Text } from "./src/ui";
 
 const LOGO = require("./assets/upande-logo.png");
 
+// Hold the Upande splash until the app has something real to show - fonts,
+// the stored session and the display settings - so launch never flashes an
+// unstyled or default-sized frame on the way in.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold,
@@ -42,12 +51,21 @@ export default function App() {
       .then(([s]) => { setSession(s); setBooting(false); });
   }, []);
 
-  if (!fontsLoaded || booting) {
-    return <View style={s.boot}><ActivityIndicator size="large" color={C.ink} /></View>;
-  }
-  return session
-    ? <Shell session={session} onLogout={async () => { await clearSession(); setSession(null); }} />
-    : <Login onDone={setSession} />;
+  const ready = fontsLoaded && !booting;
+
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+
+  if (!ready) return null;   // the splash is still up
+
+  return (
+    <SafeAreaProvider>
+      {session
+        ? <Shell session={session} onLogout={async () => { await clearSession(); setSession(null); }} />
+        : <Login onDone={setSession} />}
+    </SafeAreaProvider>
+  );
 }
 
 /* ---------------------------------------------------------------- Login */
@@ -102,6 +120,9 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 function Shell({ session, onLogout }: { session: Session; onLogout: () => void }) {
   const [nav, setNav] = useState<NavState>({ view: "home" });
   const [settings] = useSettings();
+  const insets = useSafeAreaInsets();
+  // Clear both the quick bar and whatever the system navigation takes.
+  const barHeight = settings.bottomNav ? 78 + insets.bottom : insets.bottom;
   const [drawer, setDrawer] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
@@ -321,7 +342,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
     <View style={s.page}>
       <StatusBar style="dark" />
       <ScrollView
-        contentContainerStyle={[s.app, settings.bottomNav && { paddingBottom: 96 }]}
+        contentContainerStyle={[s.app, { paddingBottom: barHeight + 18 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.ink} />}
       >
@@ -360,7 +381,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
       />
 
       {toastMsg && (
-        <View style={s.toast} pointerEvents="none">
+        <View style={[s.toast, { bottom: barHeight + 18 }]} pointerEvents="none">
           <Text style={s.toastText}>{toastMsg}</Text>
         </View>
       )}
@@ -377,8 +398,19 @@ function BottomNav({
   onGo: (v: ViewName) => void;
   big: boolean;
 }) {
+  // Android draws edge-to-edge, so without the inset the bar sits underneath
+  // the system back/home/recents controls and its right-hand items become
+  // unreachable. Gesture-navigation phones report a small inset; three-button
+  // navigation reports a tall one.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={[s.bnav, big && { paddingTop: 10, paddingBottom: 14 }]}>
+    <View
+      style={[
+        s.bnav,
+        big && { paddingTop: 10 },
+        { paddingBottom: Math.max(insets.bottom, big ? 14 : 10) },
+      ]}
+    >
       {BOTTOM_NAV.map((n) => {
         const on = n.view === current;
         return (
