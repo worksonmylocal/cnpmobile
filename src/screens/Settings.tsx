@@ -1,10 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, View } from "react-native";
 import { C, F, shadowCard } from "../theme";
 import {
   FONT_MAX, FONT_MIN, FONT_STEP, Settings as S, fs, useSettings,
 } from "../settings";
-import { BtnBig, Card, CardH3, Meta } from "../ui";
+import { BtnBig, Card, CardH3, Meta, Text } from "../ui";
 
 export default function Settings({
   user, pending, onSync,

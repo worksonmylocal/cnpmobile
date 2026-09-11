@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { call } from "../api";
 import { C, F, shadowCard } from "../theme";
-import { BtnBig } from "../ui";
+import { BtnBig, Text } from "../ui";
 
 type Metrics = {
   pending_applications: number; ready_to_record: number; progress_pct: number;

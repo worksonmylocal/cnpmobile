@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { C, F, shadowCard } from "../theme";
-import { Empty, Pill, PillKind, SectionGroup, Spinner } from "../ui";
+import { Empty, Pill, PillKind, SectionGroup, Spinner, Text } from "../ui";
 import { useLoad } from "../useLoad";
 
 type BlockRow = { block: string; status: string };

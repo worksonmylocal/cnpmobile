@@ -47,6 +47,7 @@ export async function loadSettings(): Promise<Settings> {
   } catch {
     cached = { ...DEFAULTS };
   }
+  notify();
   return cached;
 }
 
@@ -57,6 +58,7 @@ export async function saveSettings(next: Settings): Promise<Settings> {
   } catch {
     // A phone that cannot write preferences should still run with them.
   }
+  notify();
   return cached;
 }
 
@@ -67,6 +69,7 @@ export async function resetSettings(): Promise<Settings> {
   } catch {
     /* see above */
   }
+  notify();
   return cached;
 }
 
@@ -86,18 +89,37 @@ export function pad(base: number, big = cached.bigTouch): number {
   return big ? Math.round(base * 1.35) : base;
 }
 
-/** Read settings and keep re-rendering in step with changes to them. */
+/**
+ * Everyone watching the settings.
+ *
+ * These are global to the app, so a local useState per component does not
+ * work: the Settings screen would update its own copy and the shell that
+ * draws the quick bar would never hear about it. One store, many listeners.
+ */
+type Listener = (s: Settings) => void;
+const listeners = new Set<Listener>();
+
+function notify() {
+  for (const fn of listeners) fn(cached);
+}
+
+/** Read settings and re-render whenever any part of the app changes them. */
 export function useSettings(): [Settings, (patch: Partial<Settings>) => Promise<void>, () => Promise<void>] {
   const [settings, setSettings] = useState<Settings>(cached);
 
-  useEffect(() => { loadSettings().then(setSettings); }, []);
+  useEffect(() => {
+    listeners.add(setSettings);
+    // Pick up anything stored before this component mounted.
+    loadSettings().then(setSettings);
+    return () => { listeners.delete(setSettings); };
+  }, []);
 
   const update = useCallback(async (patch: Partial<Settings>) => {
-    setSettings(await saveSettings({ ...cached, ...patch }));
+    await saveSettings({ ...cached, ...patch });
   }, []);
 
   const reset = useCallback(async () => {
-    setSettings(await resetSettings());
+    await resetSettings();
   }, []);
 
   return [settings, update, reset];

@@ -1,7 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { productCode, productName } from "../nav";
 import { C, F, shadowCard } from "../theme";
-import { Empty, Pill, PillKind, Spinner } from "../ui";
+import { Empty, Pill, PillKind, Spinner, Text } from "../ui";
 import { useLoad } from "../useLoad";
 
 type Req = {

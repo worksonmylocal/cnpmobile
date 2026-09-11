@@ -1,10 +1,29 @@
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { call, writeCall } from "../api";
 import { Plan, PlanMode, productCode, productName } from "../nav";
 import { C, F } from "../theme";
-import { BtnBig, Card, CardH3, Empty, FieldInput, InputLabel, Meta, PickRow, Spinner } from "../ui";
+import { BtnBig, Card, CardH3, Empty, FieldInput, InputLabel, Meta, PickRow, Spinner, Text } from "../ui";
+import { currentSettings } from "../settings";
+
+/**
+ * Ask once more, if the supervisor asked to be asked.
+ *
+ * Both of these actions are hard to walk back from a phone in a field - a
+ * store request goes straight into the farm manager's queue, and a recorded
+ * application moves stock - so the setting is worth honouring at exactly
+ * these two points and nowhere else.
+ */
+function confirmIfWanted(title: string, body: string): Promise<boolean> {
+  if (!currentSettings().confirmSubmit) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    Alert.alert(title, body, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: "Confirm", onPress: () => resolve(true) },
+    ]);
+  });
+}
 
 type Applicator = { name: string; employee_name: string };
 
@@ -46,6 +65,11 @@ function RequestForm({ plan, onBack, toast }: { plan: Plan; onBack: () => void; 
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    const ok = await confirmIfWanted(
+      "Send this request?",
+      `${qty} Kg of ${productName(plan)} for ${plan.block}.`,
+    );
+    if (!ok) return;
     setBusy(true);
     try {
       const r = await writeCall<{ name: string }>("create_store_request", {
@@ -164,6 +188,11 @@ function RecordForm({
 
   async function submit() {
     if (!full && !reason.trim()) { toast("Please give a reason"); return; }
+    const ok = await confirmIfWanted(
+      "Record this application?",
+      `${qty} Kg of ${productName(plan)} on ${plan.block}. This moves stock and cannot be undone from the app.`,
+    );
+    if (!ok) return;
     setBusy(true);
     try {
       // The web page refuses to record against a block the store has not

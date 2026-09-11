@@ -1,9 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { writeCall } from "../api";
 import { currentSettings, fs, pad } from "../settings";
 import { C, F, shadowCard } from "../theme";
 import { useLoad } from "../useLoad";
-import { Empty, Spinner, initials } from "../ui";
+import { Empty, initials, Spinner, Text } from "../ui";
 
 type Person = {
   name: string;

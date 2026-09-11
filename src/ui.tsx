@@ -5,10 +5,33 @@
 import { Feather } from "@expo/vector-icons";
 import { ReactNode, useMemo, useState } from "react";
 import {
-  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput,
-  View, ViewStyle,
+  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet,
+  Text as RNText, TextInput, TextProps, View, ViewStyle,
 } from "react-native";
+import { currentSettings } from "./settings";
 import { C, F, shadowCard } from "./theme";
+
+/**
+ * Text that honours the user's chosen size.
+ *
+ * Every screen builds its typography with StyleSheet.create, which runs once
+ * at module load - so sizes baked in there can never react to a setting.
+ * Scaling here instead means one import swap per screen makes the whole app
+ * respond, rather than every size having to be threaded through by hand.
+ *
+ * Read synchronously rather than subscribed: the shell watches the settings
+ * and re-renders on change, which re-renders every Text below it. Hundreds of
+ * individual subscriptions would cost more and buy nothing.
+ */
+export function Text({ style, ...rest }: TextProps) {
+  const { fontScale } = currentSettings();
+  if (fontScale === 100) return <RNText style={style} {...rest} />;
+
+  const flat = StyleSheet.flatten(style) as { fontSize?: number } | undefined;
+  // 14 is React Native's own default, so an unsized Text scales like the rest.
+  const base = typeof flat?.fontSize === "number" ? flat.fontSize : 14;
+  return <RNText style={[style, { fontSize: Math.round((base * fontScale) / 100) }]} {...rest} />;
+}
 
 export function initials(name?: string): string {
   const parts = (name || "?").trim().split(/\s+/);
@@ -42,9 +65,16 @@ export function BtnBig({
     good: C.good, bad: C.bad, grey: C.grey,
   }[kind];
   const fg = kind === "grey" ? C.ink3 : C.onInk;
+  const { bigTouch } = currentSettings();
   return (
     <Pressable
-      style={[u.btnBig, { backgroundColor: bg }, disabled && u.btnDisabled, style]}
+      style={[
+        u.btnBig,
+        bigTouch && { paddingVertical: 21 },
+        { backgroundColor: bg },
+        disabled && u.btnDisabled,
+        style,
+      ]}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
@@ -178,7 +208,10 @@ export function PickRow({
   showCheck?: boolean; showInitial?: boolean; onPress: () => void;
 }) {
   return (
-    <Pressable style={[u.pickRow, selected && u.pickRowSelected]} onPress={onPress}>
+    <Pressable
+      style={[u.pickRow, currentSettings().bigTouch && { paddingVertical: 19 }, selected && u.pickRowSelected]}
+      onPress={onPress}
+    >
       {showInitial && (
         <View style={u.initial}><Text style={u.initialText}>{initials(label)}</Text></View>
       )}

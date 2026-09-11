@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Plan, PlanMode, productCode, productName } from "../nav";
 import { C, F, shadowCard } from "../theme";
-import { BtnBig, BtnKind, Empty, Pill, PillKind, Select, Spinner } from "../ui";
+import { BtnBig, BtnKind, Empty, Pill, PillKind, Select, Spinner, Text } from "../ui";
 import { useLoad } from "../useLoad";
 
 /** The status -> pill + action mapping from drawSectionPlans(). */

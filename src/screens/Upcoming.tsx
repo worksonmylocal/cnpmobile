@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { C, F, shadowCard } from "../theme";
-import { Empty, Spinner } from "../ui";
+import { Empty, Spinner, Text } from "../ui";
 import { useLoad } from "../useLoad";
 import { Pressable } from "react-native";
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
+import {  } from "react-native";
 import { call, writeCall } from "../api";
 import { C, F } from "../theme";
-import { BtnBig, Card, CardH3, Meta, Spinner } from "../ui";
+import { BtnBig, Card, CardH3, Meta, Spinner, Text } from "../ui";
 import { Applicator } from "./Team";
 
 type Stats = { applications: number; total_kg: number };

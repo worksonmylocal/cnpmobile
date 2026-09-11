@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { writeCall } from "../api";
 import { C, F, shadowCard } from "../theme";
-import { BtnBig, Empty, SectionGroup, Spinner, initials } from "../ui";
+import { BtnBig, Empty, initials, SectionGroup, Spinner, Text } from "../ui";
 import { useLoad } from "../useLoad";
 
 export type Applicator = {

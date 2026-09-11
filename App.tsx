@@ -4,10 +4,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform,
-  Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
-} from "react-native";
+import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { call, flushQueue, getQueue, login, writeCall } from "./src/api";
 import { clearSession, loadSession, Session } from "./src/auth";
 import { loadSettings, useSettings } from "./src/settings";
@@ -27,7 +24,7 @@ import StoreRequests from "./src/screens/StoreRequests";
 import Team, { Applicator } from "./src/screens/Team";
 import Upcoming from "./src/screens/Upcoming";
 import { APP_TITLE, C, F, shadowCard } from "./src/theme";
-import { BackLink, BtnBig, FieldInput, Pill } from "./src/ui";
+import { BackLink, BtnBig, FieldInput, Pill, Text } from "./src/ui";
 
 const LOGO = require("./assets/upande-logo.png");
 
