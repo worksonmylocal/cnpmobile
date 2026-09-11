@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Switch, View } from "react-native";
+import * as Updates from "expo-updates";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from "react-native";
 import { C, F, shadowCard } from "../theme";
 import {
   FONT_MAX, FONT_MIN, FONT_STEP, Settings as S, fs, useSettings,
@@ -92,8 +94,101 @@ export default function Settings({
         {pending > 0 && <BtnBig label="Sync pending items now" kind="warn" onPress={onSync} />}
         <BtnBig label="Reset display settings" kind="grey" onPress={reset} />
       </Card>
+
+      <AppVersion />
     </View>
   );
+}
+
+/**
+ * Version + manual update check.
+ *
+ * The binary is built with CHECK_ON_LAUNCH=ALWAYS but LAUNCH_WAIT_MS=0, so a
+ * published update is downloaded quietly in the background and only becomes
+ * the running version on the *next* launch. For a supervisor mid-shift that
+ * reads as "the fix isn't here yet". This card is the way to pull one down
+ * and apply it now, and to say which version they're actually on when they
+ * report a problem.
+ */
+function AppVersion() {
+  const { currentlyRunning, isUpdatePending } = Updates.useUpdates();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  // runtimeVersion is the appVersion (that's the configured policy), and it is
+  // also the thing that decides which updates this install may receive - so
+  // it's the more useful number to quote than a separate display version.
+  const version = currentlyRunning.runtimeVersion ?? "development";
+
+  async function restart() {
+    try { await Updates.reloadAsync(); }
+    catch (e) { setMsg(friendly(e)); }
+  }
+
+  async function check() {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      if (!Updates.isEnabled) {
+        setMsg("This build doesn't take over-the-air updates.");
+        return;
+      }
+      const found = await Updates.checkForUpdateAsync();
+      if (!found.isAvailable) { setMsg("You're on the latest version."); return; }
+
+      setMsg("Downloading the update…");
+      const got = await Updates.fetchUpdateAsync();
+      if (!got.isNew) { setMsg("You're on the latest version."); return; }
+
+      setMsg("Restarting to finish…");
+      await Updates.reloadAsync();
+    } catch (e) {
+      setMsg(friendly(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardH3>App version</CardH3>
+      <Meta>Version {version}</Meta>
+      <Meta style={{ marginBottom: 12 }}>
+        {currentlyRunning.isEmbeddedLaunch
+          ? "Running the version this app was installed with."
+          : `Updated ${when(currentlyRunning.createdAt)}.`}
+      </Meta>
+
+      {isUpdatePending ? (
+        // Already downloaded on launch - it just needs the restart.
+        <BtnBig label="Restart to finish updating" kind="warn" onPress={restart} />
+      ) : (
+        <BtnBig
+          label={busy ? "Checking…" : "Check for updates"}
+          kind="grey"
+          onPress={check}
+          disabled={busy}
+        />
+      )}
+
+      {busy && <ActivityIndicator style={{ marginTop: 10 }} color={C.inkMute} />}
+      {msg && <Meta style={{ marginTop: 10 }}>{msg}</Meta>}
+    </Card>
+  );
+}
+
+/** checkForUpdateAsync rejects outright in dev builds and Expo Go - that is
+ *  expected there, not a fault worth showing as one. */
+function friendly(e: unknown) {
+  const m = (e as Error)?.message ?? "";
+  if (__DEV__ || /development|Expo Go|disabled/i.test(m))
+    return "Updates only work in an installed build, not in development.";
+  return "Couldn't check for updates just now. Try again when you have signal.";
+}
+
+function when(d: Date | null | undefined) {
+  if (!d) return "recently";
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function Toggle({
