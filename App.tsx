@@ -10,8 +10,10 @@ import {
 } from "react-native";
 import { call, flushQueue, getQueue, login, writeCall } from "./src/api";
 import { clearSession, loadSession, Session } from "./src/auth";
-import { DRAWER, NavState, Plan, PlanMode, TITLES, View as ViewName } from "./src/nav";
+import { loadSettings, useSettings } from "./src/settings";
+import { BOTTOM_NAV, DRAWER, NavState, Plan, PlanMode, TITLES, View as ViewName } from "./src/nav";
 import ApplicatorDetail from "./src/screens/ApplicatorDetail";
+import Attendance from "./src/screens/Attendance";
 import Blocks from "./src/screens/Blocks";
 import Correction from "./src/screens/Correction";
 import Home from "./src/screens/Home";
@@ -20,6 +22,7 @@ import {
   AddEmployee, PickBlock, PickSection, RecordBlock, RecordPlans, RecordSection,
 } from "./src/screens/Pickers";
 import SectionPlans from "./src/screens/SectionPlans";
+import Settings from "./src/screens/Settings";
 import StoreRequests from "./src/screens/StoreRequests";
 import Team, { Applicator } from "./src/screens/Team";
 import Upcoming from "./src/screens/Upcoming";
@@ -35,7 +38,12 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
 
-  useEffect(() => { loadSession().then((s) => { setSession(s); setBooting(false); }); }, []);
+  useEffect(() => {
+    // Settings are read before the first paint so the app never renders at
+    // the default size and then jumps to the user's chosen one.
+    Promise.all([loadSession(), loadSettings()])
+      .then(([s]) => { setSession(s); setBooting(false); });
+  }, []);
 
   if (!fontsLoaded || booting) {
     return <View style={s.boot}><ActivityIndicator size="large" color={C.ink} /></View>;
@@ -96,6 +104,7 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 
 function Shell({ session, onLogout }: { session: Session; onLogout: () => void }) {
   const [nav, setNav] = useState<NavState>({ view: "home" });
+  const [settings] = useSettings();
   const [drawer, setDrawer] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
@@ -292,6 +301,20 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
               go({ view: "plan-action", plan, planMode: "record", planReturn: "record-plans" })} />
           </>
         );
+      case "attendance":
+        return <Attendance reloadKey={reloadKey} toast={toast} />;
+      case "settings":
+        return (
+          <Settings
+            user={session.user}
+            pending={pending}
+            onSync={async () => {
+              const n = await flushQueue();
+              toast(n ? `${n} pending item${n > 1 ? "s" : ""} synced` : "Nothing to sync");
+              bump(); syncPending();
+            }}
+          />
+        );
       case "correction":
         return <Correction />;
     }
@@ -301,7 +324,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
     <View style={s.page}>
       <StatusBar style="dark" />
       <ScrollView
-        contentContainerStyle={s.app}
+        contentContainerStyle={[s.app, settings.bottomNav && { paddingBottom: 96 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.ink} />}
       >
@@ -326,6 +349,10 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         {body()}
       </ScrollView>
 
+      {settings.bottomNav && (
+        <BottomNav current={nav.view} onGo={(v) => go({ view: v })} big={settings.bigTouch} />
+      )}
+
       <Drawer
         open={drawer}
         current={nav.view}
@@ -340,6 +367,41 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           <Text style={s.toastText}>{toastMsg}</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+/* ----------------------------------------------------------- Bottom nav */
+
+function BottomNav({
+  current, onGo, big,
+}: {
+  current: ViewName;
+  onGo: (v: ViewName) => void;
+  big: boolean;
+}) {
+  return (
+    <View style={[s.bnav, big && { paddingTop: 10, paddingBottom: 14 }]}>
+      {BOTTOM_NAV.map((n) => {
+        const on = n.view === current;
+        return (
+          <Pressable
+            key={n.view}
+            style={[s.bnavItem, on && s.bnavItemOn]}
+            onPress={() => onGo(n.view)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={n.label}
+          >
+            <Feather
+              name={n.icon as React.ComponentProps<typeof Feather>["name"]}
+              size={big ? 23 : 20}
+              color={on ? C.ink : C.inkMute}
+            />
+            <Text style={[s.bnavLabel, on && s.bnavLabelOn]}>{n.label}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -441,6 +503,21 @@ const s = StyleSheet.create({
   drawerItemText: { fontFamily: F.semibold, fontSize: 14, color: C.ink3, flex: 1 },
   drawerFooter: { marginTop: 24, paddingHorizontal: 8, fontFamily: F.regular, fontSize: 11, color: C.inkMute },
 
+  bnav: {
+    position: "absolute", left: 0, right: 0, bottom: 0,
+    flexDirection: "row", backgroundColor: C.surface2,
+    borderTopWidth: 1, borderTopColor: C.hairline,
+    paddingTop: 6, paddingBottom: 10, paddingHorizontal: 4,
+    shadowColor: "#0a0a0a", shadowOpacity: 0.06, shadowRadius: 18,
+    shadowOffset: { width: 0, height: -4 }, elevation: 12,
+  },
+  bnavItem: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    gap: 3, paddingVertical: 7, paddingHorizontal: 2, borderRadius: 12,
+  },
+  bnavItemOn: { backgroundColor: C.grey },
+  bnavLabel: { fontFamily: F.semibold, fontSize: 10, letterSpacing: 0.2, color: C.inkMute },
+  bnavLabelOn: { color: C.ink },
   toast: {
     position: "absolute", bottom: 28, alignSelf: "center", maxWidth: "90%",
     backgroundColor: C.ink, paddingVertical: 13, paddingHorizontal: 22, borderRadius: 12,

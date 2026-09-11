@@ -3,6 +3,7 @@ export const VIEWS = [
   "home", "blocks", "upcoming", "section-plans", "plan-action", "store-requests",
   "team", "applicator-detail", "pick-section", "pick-block", "add-employee",
   "record-section", "record-block", "record-plans", "correction",
+  "attendance", "settings",
 ] as const;
 
 export type View = (typeof VIEWS)[number];
@@ -23,6 +24,8 @@ export const TITLES: Record<View, string> = {
   "record-block": "Choose Block",
   "record-plans": "Choose Product",
   correction: "Correction",
+  attendance: "Attendance",
+  settings: "Settings",
 };
 
 /** The drawer, in field.html's order. */
@@ -33,7 +36,21 @@ export const DRAWER: { view: View; icon: string; label: string }[] = [
   { view: "store-requests", icon: "📦", label: "Store Requests" },
   { view: "team", icon: "👷", label: "Manage Team" },
   { view: "record-section", icon: "📝", label: "Record Application" },
+  { view: "attendance", icon: "🗓️", label: "Attendance" },
   { view: "correction", icon: "🛠️", label: "Correction" },
+  { view: "settings", icon: "⚙️", label: "Settings" },
+];
+
+/**
+ * The bottom quick bar: the five screens a supervisor actually lives in,
+ * one tap away. Feather icon names, matching the header's icon set.
+ */
+export const BOTTOM_NAV: { view: View; icon: string; label: string }[] = [
+  { view: "home", icon: "home", label: "Home" },
+  { view: "upcoming", icon: "clock", label: "Upcoming" },
+  { view: "record-section", icon: "edit-3", label: "Record" },
+  { view: "team", icon: "users", label: "Team" },
+  { view: "attendance", icon: "calendar", label: "Register" },
 ];
 
 export type Plan = {
