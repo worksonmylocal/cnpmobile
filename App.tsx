@@ -79,11 +79,25 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 
   async function submit() {
     if (busy) return;
+    const email = usr.trim();
+    // Catch the empty case here rather than letting the server answer it -
+    // a blank submit isn't a failed sign-in, it's a form that isn't filled in.
+    if (!email || !pwd) {
+      setError(!email && !pwd
+        ? "Enter your email and password to sign in."
+        : !email ? "Enter your email to sign in."
+        : "Enter your password to sign in.");
+      return;
+    }
     setBusy(true); setError(null);
-    try { onDone(await login(usr.trim(), pwd)); }
+    try { onDone(await login(email, pwd)); }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
+
+  // Clear the message as soon as they start fixing it, so a stale error
+  // never sits under a field they've already corrected.
+  const edit = (set: (v: string) => void) => (v: string) => { set(v); if (error) setError(null); };
 
   return (
     <KeyboardAvoidingView style={s.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -94,11 +108,11 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
         <Text style={s.loginSub}>Sign in to continue.</Text>
 
         <FieldInput placeholder="Email" autoCapitalize="none" autoCorrect={false}
-          keyboardType="email-address" value={usr} onChangeText={setUsr} />
+          keyboardType="email-address" value={usr} onChangeText={edit(setUsr)} />
 
         <View style={s.pwdWrap}>
           <FieldInput placeholder="Password" autoCapitalize="none" autoCorrect={false}
-            secureTextEntry={!reveal} value={pwd} onChangeText={setPwd}
+            secureTextEntry={!reveal} value={pwd} onChangeText={edit(setPwd)}
             onSubmitEditing={submit} returnKeyType="go" style={s.pwdInput} />
           <Pressable style={s.eye} onPress={() => setReveal((v) => !v)} hitSlop={10}
             accessibilityRole="button"
@@ -488,16 +502,28 @@ const s = StyleSheet.create({
   app: { maxWidth: 480, width: "100%", alignSelf: "center", padding: 16, paddingBottom: 40 },
 
   loginScroll: {
-    flexGrow: 1, justifyContent: "center", maxWidth: 480, width: "100%",
+    flexGrow: 1, justifyContent: "center", alignItems: "center",
+    maxWidth: 480, width: "100%",
     alignSelf: "center", padding: 24, paddingBottom: 40,
   },
-  loginLogo: { height: 64, width: 72, marginBottom: 20 },
-  loginTitle: { fontFamily: F.semibold, fontSize: 24, color: C.ink, letterSpacing: -0.4 },
-  loginSub: { fontFamily: F.regular, fontSize: 13, color: C.inkMute, marginBottom: 18 },
-  pwdWrap: { position: "relative", justifyContent: "center" },
+  loginLogo: { height: 72, width: 79, marginBottom: 14 },
+  loginTitle: {
+    fontFamily: F.semibold, fontSize: 24, color: C.ink, letterSpacing: -0.4,
+    textAlign: "center",
+  },
+  loginSub: {
+    fontFamily: F.regular, fontSize: 13, color: C.inkMute, marginBottom: 18,
+    textAlign: "center",
+  },
+  // width matters here: the centring above would otherwise shrink this
+  // wrapper to its content and pull the password field out of line.
+  pwdWrap: { position: "relative", justifyContent: "center", width: "100%" },
   pwdInput: { paddingRight: 52 },
   eye: { position: "absolute", right: 14, height: 40, width: 34, alignItems: "center", justifyContent: "center" },
-  error: { fontFamily: F.medium, fontSize: 13, color: C.bad, marginTop: 6, lineHeight: 19 },
+  error: {
+    fontFamily: F.medium, fontSize: 13, color: C.bad, marginTop: 6, lineHeight: 19,
+    textAlign: "center",
+  },
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 12,

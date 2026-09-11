@@ -5,7 +5,7 @@ import { clearSession, currentSession, loadSession, saveSession } from "./auth";
 const QUEUE_KEY = "uc_offline_queue";
 const CACHE_PREFIX = "uc_cache_";
 
-export type ApiError = Error & { isNetworkError?: boolean; queued?: boolean };
+export type ApiError = Error & { isNetworkError?: boolean; isAuthError?: boolean; queued?: boolean };
 
 function err(message: string, extra: Partial<ApiError> = {}): ApiError {
   return Object.assign(new Error(message), extra);
@@ -53,7 +53,9 @@ export async function rawCall<T = any>(method: string, args?: object): Promise<T
 
   if (res.status === 401 || res.status === 403) {
     await clearSession();
-    throw err("Your session is no longer valid. Please log in again.");
+    throw err("Your session is no longer valid. Please log in again.", {
+      isAuthError: true,
+    });
   }
 
   let data: any;
@@ -147,7 +149,15 @@ export async function login(usr: string, pwd: string) {
     api_secret: string;
     user: string;
     full_name: string;
-  }>("mobile_login", { usr, pwd });
+  }>("mobile_login", { usr, pwd }).catch((e: ApiError) => {
+    // A 401 on *this* call is not an expired session - there is no session
+    // yet. It is the credentials just typed, so say that instead of the
+    // generic "log in again", which is meaningless on the login screen.
+    // Network and genuine server errors keep their own wording.
+    if (e.isAuthError)
+      throw err("Email or password is invalid. Please try again.", { isAuthError: true });
+    throw e;
+  });
   await saveSession(s);
   return s;
 }
