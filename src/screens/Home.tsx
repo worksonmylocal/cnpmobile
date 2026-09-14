@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { call } from "../api";
 import { C, F, shadowCard } from "../theme";
-import { BtnBig, Text } from "../ui";
+import { Text } from "../ui";
 
 type Metrics = {
   pending_applications: number; ready_to_record: number; progress_pct: number;
@@ -11,10 +11,9 @@ type Metrics = {
 };
 
 export default function Home({
-  user, onGo, reloadKey,
+  user, reloadKey,
 }: {
   user: string;
-  onGo: (v: "upcoming" | "blocks") => void;
   reloadKey: number;
 }) {
   const [m, setM] = useState<Metrics | null>(null);
@@ -65,11 +64,6 @@ export default function Home({
         <Stat label="APPLICATIONS TODAY" value={m?.applications_today} />
         <Stat label="UPCOMING BLOCKS" value={upcoming} />
       </View>
-
-      <View style={s.quick}>
-        <BtnBig label="Upcoming Applications" kind="ink" style={s.quickBtn} onPress={() => onGo("upcoming")} />
-        <BtnBig label="All Blocks" kind="grey" style={s.quickBtn} onPress={() => onGo("blocks")} />
-      </View>
     </View>
   );
 }
@@ -107,6 +101,4 @@ const s = StyleSheet.create({
   },
   statLabel: { fontFamily: F.medium, fontSize: 11, letterSpacing: 1, color: C.inkMute, marginBottom: 8 },
   statValue: { fontFamily: F.semibold, fontSize: 32, color: C.ink, letterSpacing: -1 },
-  quick: { flexDirection: "row", gap: 10, marginTop: 8 },
-  quickBtn: { flex: 1, marginTop: 0, width: undefined },
 });

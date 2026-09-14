@@ -138,6 +138,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   // Clear both the quick bar and whatever the system navigation takes.
   const barHeight = settings.bottomNav ? 78 + insets.bottom : insets.bottom;
   const [drawer, setDrawer] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -238,8 +239,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   function body() {
     switch (nav.view) {
       case "home":
-        return <Home user={session.user} reloadKey={reloadKey}
-          onGo={(v) => go({ view: v })} />;
+        return <Home user={session.user} reloadKey={reloadKey} />;
       case "blocks":
         return <Blocks key={reloadKey} />;
       case "upcoming":
@@ -370,12 +370,6 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
             <Text style={s.headerSub} numberOfLines={1}>{headerSub}</Text>
           </View>
           {pending > 0 && <Pill kind="warn">{pending} pending sync</Pill>}
-          {nav.view !== "home" && (
-            <Pressable style={s.homeBtn} onPress={() => go({ view: "home" })} hitSlop={8}
-              accessibilityRole="button" accessibilityLabel="Back to home">
-              <Feather name="home" size={17} color={C.ink3} />
-            </Pressable>
-          )}
         </View>
 
         {body()}
@@ -391,7 +385,16 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         user={session.user}
         onClose={() => setDrawer(false)}
         onGo={(v) => go({ view: v })}
-        onLogout={onLogout}
+        onLogout={() => { setDrawer(false); setConfirmLogout(true); }}
+      />
+
+      <ConfirmDialog
+        open={confirmLogout}
+        title="Log out?"
+        body={`You are signed in as ${session.user}. You'll need your email and password to get back in.`}
+        confirmLabel="Log out"
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={() => { setConfirmLogout(false); onLogout(); }}
       />
 
       {toastMsg && (
@@ -400,6 +403,37 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         </View>
       )}
     </View>
+  );
+}
+
+/* ------------------------------------------------------------ Confirm */
+
+/**
+ * An in-app confirm, deliberately not Alert.alert: the OS dialog is styled
+ * by Android, not by us, so it lands in the middle of a Poppins, rounded-card
+ * app looking like a different product. Same card, same buttons, same type as
+ * everything else.
+ */
+function ConfirmDialog({
+  open, title, body, confirmLabel, onCancel, onConfirm,
+}: {
+  open: boolean; title: string; body: string; confirmLabel: string;
+  onCancel: () => void; onConfirm: () => void;
+}) {
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onCancel}>
+      {/* tapping the scrim cancels, the same as the drawer */}
+      <Pressable style={s.confirmOverlay} onPress={onCancel}>
+        <Pressable style={s.confirmCard} onPress={() => {}}>
+          <Text style={s.confirmTitle}>{title}</Text>
+          <Text style={s.confirmBody}>{body}</Text>
+          <View style={s.confirmRow}>
+            <BtnBig label="Cancel" kind="grey" style={s.confirmBtn} onPress={onCancel} />
+            <BtnBig label={confirmLabel} kind="ink" style={s.confirmBtn} onPress={onConfirm} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -533,10 +567,18 @@ const s = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20, backgroundColor: C.surface2,
     alignItems: "center", justifyContent: "center", ...shadowCard,
   },
-  homeBtn: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface2,
-    alignItems: "center", justifyContent: "center", ...shadowCard,
+  confirmOverlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.35)",
+    alignItems: "center", justifyContent: "center", padding: 28,
   },
+  confirmCard: {
+    width: "100%", maxWidth: 380, backgroundColor: C.surface2,
+    borderRadius: 24, padding: 22, ...shadowCard,
+  },
+  confirmTitle: { fontFamily: F.semibold, fontSize: 18, color: C.ink, marginBottom: 6 },
+  confirmBody: { fontFamily: F.regular, fontSize: 13, color: C.inkMute, lineHeight: 19, marginBottom: 18 },
+  confirmRow: { flexDirection: "row", gap: 10 },
+  confirmBtn: { flex: 1, marginTop: 0, width: undefined },
   headerTitle: { fontFamily: F.semibold, fontSize: 17, color: C.ink, letterSpacing: -0.2 },
   headerSub: { fontFamily: F.regular, fontSize: 12, color: C.inkMute },
 
