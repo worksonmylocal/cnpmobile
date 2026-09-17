@@ -4,7 +4,7 @@ import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { call, writeCall } from "../api";
 import { Plan, PlanMode, productCode, productName } from "../nav";
 import { C, F } from "../theme";
-import { BtnBig, Card, CardH3, Empty, FieldInput, InputLabel, Meta, PickRow, Spinner, Text } from "../ui";
+import { BtnBig, Card, CardH3, Empty, FieldInput, InputLabel, Meta, PickRow, Select, Spinner, Text } from "../ui";
 import { currentSettings } from "../settings";
 
 /**
@@ -182,9 +182,19 @@ function RecordForm({
   plan: Plan; operators: string[]; onBack: () => void; toast: (m: string) => void;
 }) {
   const [qty, setQty] = useState(String(plan.total_kg_required ?? ""));
-  const [full, setFull] = useState(true);
   const [reason, setReason] = useState("");
+  const [method, setMethod] = useState("Broadcast");
+  const [weather, setWeather] = useState("Dry / Sunny");
   const [busy, setBusy] = useState(false);
+
+  // "Applied in full" is a fact about the two numbers, not a separate answer -
+  // the server derives it the same way, so the tick here only ever reflects
+  // what will actually be saved. Tolerance keeps a rounding difference on a
+  // 4,000 Kg round from reading as a partial application.
+  const planned = Number(plan.total_kg_required ?? 0);
+  const applied = Number(qty);
+  const full = !planned || !Number.isFinite(applied)
+    || applied >= planned - Math.max(planned * 0.01, 0.5);
 
   async function submit() {
     if (!full && !reason.trim()) { toast("Please give a reason"); return; }
@@ -207,9 +217,10 @@ function RecordForm({
       const r = await writeCall<{ name: string }>("record_application", {
         block_fertilizer_plan: plan.name,
         actual_quantity: qty,
-        applied_in_full: full ? 1 : 0,
         partial_reason: full ? "" : reason,
-        store_request: sr,
+        material_request: sr,
+        application_method: method,
+        weather_conditions: weather,
         operators,
       });
       toast("Application recorded: " + r.name);
@@ -232,14 +243,16 @@ function RecordForm({
       <InputLabel>Actual quantity applied (Kg)</InputLabel>
       <FieldInput value={qty} onChangeText={setQty} keyboardType="numeric" />
 
-      <Pressable style={s.toggleRow} onPress={() => setFull((v) => !v)}>
+      <View style={s.toggleRow}>
         <Feather
           name={full ? "check-square" : "square"}
           size={22}
-          color={full ? C.ink : C.inkFaint}
+          color={full ? C.good : C.inkFaint}
         />
-        <Text style={s.toggleLabel}>Applied in full</Text>
-      </Pressable>
+        <Text style={s.toggleLabel}>
+          {full ? "Applied in full" : `Partial — ${(planned - applied).toFixed(1)} Kg short`}
+        </Text>
+      </View>
 
       {!full && (
         <View>
@@ -247,6 +260,22 @@ function RecordForm({
           <FieldInput placeholder="e.g. ran out of stock" value={reason} onChangeText={setReason} />
         </View>
       )}
+
+      <InputLabel>Application method</InputLabel>
+      <Select
+        value={method}
+        onChange={setMethod}
+        options={["Broadcast", "Branding", "Drip Fertigation", "Foliar Spray", "Other"]
+          .map((v) => ({ value: v, label: v }))}
+      />
+
+      <InputLabel>Weather conditions</InputLabel>
+      <Select
+        value={weather}
+        onChange={setWeather}
+        options={["Dry / Sunny", "Light Cloud", "Light Rain", "Wet"]
+          .map((v) => ({ value: v, label: v }))}
+      />
 
       <BtnBig label="Submit application" kind="warn" onPress={submit} disabled={busy} />
     </Card>
