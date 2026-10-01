@@ -48,19 +48,6 @@ export function PickBlock({
   );
 }
 
-type Employee = { name: string; employee_name: string };
-export function AddEmployee({ onSelect }: { onSelect: (employee: string) => void }) {
-  return (
-    <Picker<Employee>
-      method="get_available_employees_for_team"
-      placeholder="Search employees by name…"
-      emptyText="No available employees to add right now."
-      getLabel={(e) => e.employee_name}
-      getKey={(e) => e.name}
-      onSelect={(e) => onSelect(e.name)}
-    />
-  );
-}
 
 type IssuedSection = { section: string; pending_count: number };
 export function RecordSection({ onSelect }: { onSelect: (section: string) => void }) {

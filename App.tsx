@@ -23,8 +23,9 @@ import Blocks from "./src/screens/Blocks";
 import Correction from "./src/screens/Correction";
 import Home from "./src/screens/Home";
 import PlanAction from "./src/screens/PlanAction";
+import AddApplicators from "./src/screens/AddApplicators";
 import {
-  AddEmployee, PickBlock, PickSection, RecordBlock, RecordPlans, RecordSection,
+  PickBlock, PickSection, RecordBlock, RecordPlans, RecordSection,
 } from "./src/screens/Pickers";
 import SectionPlans from "./src/screens/SectionPlans";
 import Settings from "./src/screens/Settings";
@@ -348,18 +349,6 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
     }
   }
 
-  async function doAddApplicator(employee: string) {
-    try {
-      await writeCall("add_applicator", { employee });
-      if (nav.pickedBlock) await writeCall("assign_block", { employee, block: nav.pickedBlock });
-      toast("Applicator added");
-      go({ view: "team" }); bump();
-    } catch (e) {
-      const err = e as Error & { queued?: boolean };
-      toast(err.message);
-      if (err.queued) go({ view: "team" });
-    }
-  }
 
   async function doReassign(block: string) {
     try {
@@ -457,7 +446,11 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           <>
             <BackLink label="Back"
               onPress={() => go({ view: nav.addEmployeeReturn ?? "pick-block" })} />
-            <AddEmployee onSelect={doAddApplicator} />
+            <AddApplicators
+              block={nav.pickedBlock ?? undefined}
+              toast={toast}
+              onDone={() => { go({ view: "team" }); bump(); }}
+            />
           </>
         );
       case "record-section":
