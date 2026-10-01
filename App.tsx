@@ -5,7 +5,7 @@ import {
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, BackHandler, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Animated, BackHandler, Image, KeyboardAvoidingView, LayoutChangeEvent, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   SafeAreaProvider, useSafeAreaInsets,
 } from "react-native-safe-area-context";
@@ -130,10 +130,43 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
   // never sits under a field they've already corrected.
   const edit = (set: (v: string) => void) => (v: string) => { set(v); if (error) setError(null); };
 
+  /**
+   * Scroll a field clear of the keyboard when it takes focus.
+   *
+   * Shrinking the view is only half of it: the form is centred, so the field
+   * being typed into can still end up behind the keyboard - which is exactly
+   * what happened once the server box pushed everything down. Each field
+   * records where it sits, and focusing it scrolls that point near the top.
+   */
+  const scroll = useRef<ScrollView>(null);
+  const tops = useRef<Record<string, number>>({});
+
+  const field = (key: string) => ({
+    onLayout: (e: LayoutChangeEvent) => { tops.current[key] = e.nativeEvent.layout.y; },
+    onFocus: () => {
+      const y = tops.current[key];
+      if (y === undefined) return;
+      // A small margin above, so the field is not flush against the top edge.
+      requestAnimationFrame(() =>
+        scroll.current?.scrollTo({ y: Math.max(0, y - 28), animated: true }));
+    },
+  });
+
   return (
-    <KeyboardAvoidingView style={s.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    // "padding" on Android too. It was passed undefined there, which makes the
+    // component inert - which is why the keyboard sat on top of the fields
+    // instead of the form moving out from under it. RN's own implementation
+    // does subscribe to keyboardDidShow on Android; it just needs a behavior.
+    <KeyboardAvoidingView style={s.page} behavior="padding">
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={s.loginScroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scroll}
+        contentContainerStyle={s.loginScroll}
+        keyboardShouldPersistTaps="handled"
+        // Room to scroll the last field clear of the keyboard; without it
+        // there is nothing below the button to scroll into.
+        contentInsetAdjustmentBehavior="automatic"
+      >
         {/* The logo doubles as the way in to the server field: hold it for two
             seconds. Discoverable to whoever is told, invisible to everyone
             else, and impossible to hit by accident. */}
@@ -149,13 +182,14 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
         <Text style={s.loginSub}>Sign in to continue.</Text>
 
         {showServer && (
-          <View style={s.serverBox}>
+          <View style={s.serverBox} onLayout={field("server").onLayout}>
             <Text style={s.serverLabel}>SERVER ADDRESS</Text>
             <FieldInput
               placeholder="kaitet-group.upande.com"
               autoCapitalize="none" autoCorrect={false} keyboardType="url"
               value={server}
               onChangeText={(v) => { setServer(v); setSavedNote(null); }}
+              onFocus={field("server").onFocus}
             />
             <Text style={s.serverHint}>
               Kept on this device and reused after you sign out.
@@ -166,12 +200,16 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 
         {savedNote && <Text style={s.savedNote}>{savedNote}</Text>}
 
-        <FieldInput placeholder="Email" autoCapitalize="none" autoCorrect={false}
-          keyboardType="email-address" value={usr} onChangeText={edit(setUsr)} />
+        <View onLayout={field("email").onLayout} style={s.fieldWrap}>
+          <FieldInput placeholder="Email" autoCapitalize="none" autoCorrect={false}
+            keyboardType="email-address" value={usr} onChangeText={edit(setUsr)}
+            onFocus={field("email").onFocus} returnKeyType="next" />
+        </View>
 
-        <View style={s.pwdWrap}>
+        <View style={s.pwdWrap} onLayout={field("password").onLayout}>
           <FieldInput placeholder="Password" autoCapitalize="none" autoCorrect={false}
             secureTextEntry={!reveal} value={pwd} onChangeText={edit(setPwd)}
+            onFocus={field("password").onFocus}
             onSubmitEditing={submit} returnKeyType="go" style={s.pwdInput} />
           <Pressable style={s.eye} onPress={() => setReveal((v) => !v)} hitSlop={10}
             accessibilityRole="button"
@@ -462,8 +500,12 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   return (
     <View style={s.page}>
       <StatusBar style="dark" />
+      {/* Wrapping only the scroller: the quick bar and the toast are siblings
+          below, so the keyboard lifts the content without dragging the
+          furniture up with it. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <ScrollView
-        contentContainerStyle={[s.app, { paddingBottom: barHeight + 18 }]}
+        contentContainerStyle={[s.app, { paddingBottom: barHeight + 120 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.ink} />}
       >
@@ -487,6 +529,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
 
         {body()}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {settings.bottomNav && (
         <BottomNav current={nav.view} onGo={(v) => go({ view: v })} big={settings.bigTouch} />
@@ -689,8 +732,13 @@ const s = StyleSheet.create({
   loginScroll: {
     flexGrow: 1, justifyContent: "center", alignItems: "center",
     maxWidth: 480, width: "100%",
-    alignSelf: "center", padding: 24, paddingBottom: 40,
+    alignSelf: "center", padding: 24,
+    // Deep enough that focusing the password field can always scroll it clear
+    // of the keyboard, even with the server box open above it. Without slack
+    // below the button there is nothing to scroll into.
+    paddingBottom: 220,
   },
+  fieldWrap: { width: "100%" },
   loginLogo: { height: 72, width: 79, marginBottom: 14 },
   serverBox: {
     width: "100%", backgroundColor: C.surface, borderRadius: 18,
