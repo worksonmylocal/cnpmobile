@@ -124,3 +124,19 @@ export function useSettings(): [Settings, (patch: Partial<Settings>) => Promise<
 
   return [settings, update, reset];
 }
+
+
+/**
+ * Whose app shows the diagnostics.
+ *
+ * The debug log and the server ping are for whoever maintains the app, not for
+ * a supervisor in a field - a screen full of HTTP statuses is noise to them and
+ * an invitation to change something they shouldn't. Gated by account rather
+ * than by a build flag so the same APK everyone installs is the one being
+ * diagnosed.
+ */
+export const OWNER = "steve@upande.com";
+
+export function isOwner(user?: string | null): boolean {
+  return (user || "").trim().toLowerCase() === OWNER;
+}

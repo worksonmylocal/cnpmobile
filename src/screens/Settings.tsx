@@ -1,11 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import * as Updates from "expo-updates";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from "react-native";
 import { C, F, shadowCard } from "../theme";
 import {
-  FONT_MAX, FONT_MIN, FONT_STEP, Settings as S, fs, useSettings,
+  FONT_MAX, FONT_MIN, FONT_STEP, Settings as S, fs, isOwner, useSettings,
 } from "../settings";
+import { CONN_DETAIL, CONN_LABEL, pingServer, useConnection } from "../connection";
+import { currentInstanceUrl } from "../instance";
+import * as debug from "../debuglog";
 import { BtnBig, Card, CardH3, Meta, Text } from "../ui";
 
 export default function Settings({
@@ -96,9 +99,78 @@ export default function Settings({
       </Card>
 
       <AppVersion />
+
+      {/* Maintainer-only. A supervisor does not need HTTP statuses, and an
+          invitation to poke at them is an invitation to break something. */}
+      {isOwner(user) && <Diagnostics />}
     </View>
   );
 }
+
+function Diagnostics() {
+  const [conn, recheck] = useConnection();
+  const [entries, setEntries] = useState(debug.snapshot());
+  const [ping, setPing] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => debug.subscribe(setEntries), []);
+
+  async function doPing() {
+    if (busy) return;
+    setBusy(true);
+    setPing("Pinging…");
+    const r = await pingServer();
+    setPing(r.ok
+      ? `Reachable — HTTP ${r.status} in ${r.ms}ms`
+      : `Unreachable after ${r.ms}ms — ${r.error}`);
+    recheck();
+    setBusy(false);
+  }
+
+  return (
+    <>
+      <Card>
+        <CardH3>Server</CardH3>
+        <Meta>{currentInstanceUrl()}</Meta>
+        <View style={s.connRow}>
+          <View style={[s.connDot, { backgroundColor: CONN_COLOUR[conn] }]} />
+          <Text style={s.connLabel}>{CONN_LABEL[conn]}</Text>
+        </View>
+        <Meta style={{ marginBottom: 12 }}>{CONN_DETAIL[conn]}</Meta>
+        <BtnBig label={busy ? "Pinging…" : "Ping server"} kind="grey"
+          onPress={doPing} disabled={busy} />
+        {ping && <Meta style={{ marginTop: 10 }}>{ping}</Meta>}
+      </Card>
+
+      <Card>
+        <CardH3>Debug log</CardH3>
+        <Meta style={{ marginBottom: 10 }}>
+          {entries.length
+            ? `Last ${entries.length} event${entries.length === 1 ? "" : "s"}, newest first. Held in memory only.`
+            : "Nothing logged yet. Use the app and failures will appear here."}
+        </Meta>
+        {entries.slice(0, 40).map((e, i) => (
+          <View key={`${e.at}-${i}`} style={s.logRow}>
+            <Text style={[s.logLevel, { color: LEVEL_COLOUR[e.level] }]}>
+              {new Date(e.at).toISOString().slice(11, 19)} {e.level.toUpperCase()}
+            </Text>
+            <Text style={s.logText}>{e.tag}: {e.message}</Text>
+          </View>
+        ))}
+        {entries.length > 0 && (
+          <BtnBig label="Clear log" kind="grey" onPress={() => debug.clear()} />
+        )}
+      </Card>
+    </>
+  );
+}
+
+const CONN_COLOUR: Record<string, string> = {
+  online: C.good, offline: C.inkFaint, noserver: C.bad, checking: C.warn,
+};
+const LEVEL_COLOUR: Record<string, string> = {
+  info: C.inkMute, warn: C.warn, error: C.bad,
+};
 
 /**
  * Version + manual update check.
@@ -213,6 +285,14 @@ function Toggle({
 }
 
 const s = StyleSheet.create({
+  connRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 4 },
+  connDot: { width: 10, height: 10, borderRadius: 5 },
+  connLabel: { fontFamily: F.semibold, fontSize: 13, color: C.ink3 },
+  logRow: {
+    paddingVertical: 7, borderTopWidth: 1, borderTopColor: C.hairline,
+  },
+  logLevel: { fontFamily: F.semibold, fontSize: 10, letterSpacing: 0.4 },
+  logText: { fontFamily: F.regular, fontSize: 11.5, color: C.ink4, lineHeight: 16, marginTop: 2 },
   label: { fontFamily: F.regular, color: C.ink4, marginTop: 6 },
   labelValue: { fontFamily: F.semibold, color: C.ink },
   stepper: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10, marginBottom: 16 },

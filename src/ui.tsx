@@ -86,6 +86,26 @@ export function BtnBig({
 
 /* .pill */
 export type PillKind = "good" | "bad" | "warn" | "info" | "mute";
+/**
+ * The connection dot. One fixed place in the header on every screen, so it is
+ * somewhere you learn to glance rather than hunt for. Sized to be noticed
+ * without becoming decoration, and it carries a ring so it still reads on a
+ * white card for anyone who cannot separate the colours.
+ */
+export function StatusDot({ state }: { state: "online" | "offline" | "noserver" | "checking" }) {
+  const colour = {
+    online: C.good,
+    offline: C.inkFaint,
+    noserver: C.bad,
+    checking: C.warn,
+  }[state];
+  return (
+    <View style={u.dotWrap}>
+      <View style={[u.dot, { backgroundColor: colour }]} />
+    </View>
+  );
+}
+
 export function Pill({ kind, children }: { kind: PillKind; children: ReactNode }) {
   const map = {
     good: [C.goodBg, C.good], bad: [C.badBg, C.bad], warn: [C.warnBg, C.warn],
@@ -269,6 +289,15 @@ export function Select({
 }
 
 export const u = StyleSheet.create({
+  dotWrap: {
+    width: 26, height: 26, borderRadius: 13, alignItems: "center",
+    justifyContent: "center", backgroundColor: C.surface2, ...shadowCard,
+  },
+  dot: {
+    width: 12, height: 12, borderRadius: 6,
+    borderWidth: 2, borderColor: C.surface2,
+  },
+
   card: {
     backgroundColor: C.surface2, borderRadius: 24, paddingVertical: 18,
     paddingHorizontal: 20, marginBottom: 14, ...shadowCard,

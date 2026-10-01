@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_PREFIX, BASE_URL } from "./config";
+import { API_PREFIX } from "./config";
+import { currentInstanceUrl } from "./instance";
+import * as debug from "./debuglog";
 import { clearSession, currentSession, loadSession, saveSession } from "./auth";
 
 const QUEUE_KEY = "uc_offline_queue";
@@ -35,9 +37,10 @@ function extractServerMessage(data: any): string | null {
 export async function rawCall<T = any>(method: string, args?: object): Promise<T> {
   const session = currentSession() ?? (await loadSession());
 
+  const url = currentInstanceUrl() + API_PREFIX + method;
   let res: Response;
   try {
-    res = await fetch(BASE_URL + API_PREFIX + method, {
+    res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -47,11 +50,13 @@ export async function rawCall<T = any>(method: string, args?: object): Promise<T
       },
       body: JSON.stringify(args ?? {}),
     });
-  } catch {
+  } catch (e) {
+    debug.error(method, `no connection to ${url} :: ${(e as Error)?.message || e}`);
     throw err("No connection to the server.", { isNetworkError: true });
   }
 
   if (res.status === 401 || res.status === 403) {
+    debug.warn(method, `HTTP ${res.status} - session cleared`);
     await clearSession();
     throw err("Your session is no longer valid. Please log in again.", {
       isAuthError: true,
@@ -70,8 +75,11 @@ export async function rawCall<T = any>(method: string, args?: object): Promise<T
   }
 
   if (!res.ok || data?.exc) {
-    throw err(extractServerMessage(data) ?? `Server error (HTTP ${res.status}).`);
+    const message = extractServerMessage(data) ?? `Server error (HTTP ${res.status}).`;
+    debug.error(method, `HTTP ${res.status} :: ${message}`);
+    throw err(message);
   }
+  debug.info(method, `HTTP ${res.status}`);
   return data.message as T;
 }
 
