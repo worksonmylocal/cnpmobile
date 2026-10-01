@@ -31,8 +31,10 @@ import Settings from "./src/screens/Settings";
 import StoreRequests from "./src/screens/StoreRequests";
 import Team, { Applicator } from "./src/screens/Team";
 import Upcoming from "./src/screens/Upcoming";
-import { APP_TITLE, C, F, shadowCard } from "./src/theme";
+import { APP_TITLE, C, F, SP, shadowCard } from "./src/theme";
 import { BackLink, BtnBig, FieldInput, Pill, StatusDot, Text } from "./src/ui";
+import Changelog, { changelogUnseen, changelogVersion } from "./src/components/Changelog";
+import Tutorial from "./src/components/Tutorial";
 
 const LOGO = require("./assets/upande-logo.png");
 
@@ -197,6 +199,19 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   const [drawer, setDrawer] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [conn, recheck] = useConnection();
+  const [howTo, setHowTo] = useState(false);
+  const [whatsNew, setWhatsNew] = useState(false);
+  const [hasNews, setHasNews] = useState(false);
+
+  // Surface the changelog once per release, on the first screen after signing
+  // in. Checked rather than assumed, so a reinstall of the same build stays
+  // quiet.
+  useEffect(() => {
+    changelogUnseen().then((unseen) => {
+      setHasNews(unseen);
+      if (unseen) setWhatsNew(true);
+    });
+  }, []);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -483,7 +498,19 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         user={session.user}
         onClose={() => setDrawer(false)}
         onGo={(v) => go({ view: v })}
+        version={changelogVersion()}
+        hasNews={hasNews}
         onLogout={() => { setDrawer(false); setConfirmLogout(true); }}
+        // Let the drawer finish sliding out before a sheet slides in -
+        // two animations at once reads as a glitch.
+        onHowTo={() => { setDrawer(false); setTimeout(() => setHowTo(true), 250); }}
+        onWhatsNew={() => { setDrawer(false); setTimeout(() => setWhatsNew(true), 250); }}
+      />
+
+      <Tutorial open={howTo} onClose={() => setHowTo(false)} />
+      <Changelog
+        open={whatsNew}
+        onClose={() => { setWhatsNew(false); setHasNews(false); }}
       />
 
       <ConfirmDialog
@@ -584,10 +611,13 @@ function BottomNav({
 /* --------------------------------------------------------------- Drawer */
 
 function Drawer({
-  open, current, user, onClose, onGo, onLogout,
+  open, current, user, version, hasNews,
+  onClose, onGo, onLogout, onHowTo, onWhatsNew,
 }: {
-  open: boolean; current: ViewName; user: string;
+  open: boolean; current: ViewName; user: string; version: string;
+  hasNews: boolean;
   onClose: () => void; onGo: (v: ViewName) => void; onLogout: () => void;
+  onHowTo: () => void; onWhatsNew: () => void;
 }) {
   const x = useRef(new Animated.Value(-260)).current;
   useEffect(() => {
@@ -614,11 +644,34 @@ function Drawer({
                 </Pressable>
               );
             })}
+            {/* Below the rule: things you do, not places you go. */}
+            <View style={s.drawerSep} />
+
+            <Pressable style={s.drawerItem} onPress={onHowTo}>
+              <View style={[s.drawerBubble, { backgroundColor: C.goodBg }]}>
+                <Feather name="help-circle" size={14} color={C.good} />
+              </View>
+              <Text style={s.drawerItemText}>How to Use</Text>
+            </Pressable>
+
+            <Pressable style={s.drawerItem} onPress={onWhatsNew}>
+              <View style={[s.drawerBubble, { backgroundColor: C.infoBg }]}>
+                <Feather name="gift" size={14} color={C.info} />
+              </View>
+              <Text style={s.drawerItemText}>What's New</Text>
+              {hasNews && <View style={s.newsDot} />}
+            </Pressable>
+
             <Pressable style={s.drawerItem} onPress={onLogout}>
-              <Text style={s.drawerIcon}>🚪</Text>
+              <View style={[s.drawerBubble, { backgroundColor: C.badBg }]}>
+                <Feather name="log-out" size={14} color={C.bad} />
+              </View>
               <Text style={s.drawerItemText}>Log out</Text>
             </Pressable>
-            <Text style={s.drawerFooter}>Signed in as {user}</Text>
+
+            <Text style={s.drawerFooter}>
+              Signed in as {user}{"\n"}{APP_TITLE} v{version}
+            </Text>
           </Pressable>
         </Animated.View>
       </Pressable>
@@ -729,6 +782,17 @@ const s = StyleSheet.create({
     fontFamily: F.medium, fontSize: 13.5, color: C.ink3, flex: 1,
     letterSpacing: -0.1,
   },
+  drawerSep: {
+    height: 1, backgroundColor: C.hairline,
+    marginVertical: SP.sm, marginHorizontal: 11,
+  },
+  drawerBubble: {
+    width: 24, height: 24, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+  },
+  // An unread marker, not a count: there is either something new or there
+  // isn't, and a number would only invite counting.
+  newsDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.info },
   drawerFooter: {
     marginTop: 18, paddingHorizontal: 11, paddingTop: 12,
     borderTopWidth: 1, borderTopColor: C.hairline,
