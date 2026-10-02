@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { call } from "../api";
+import {
+  loadProgrammeSelection, ProgrammeOption, programmeLabel,
+  reconcileProgrammeSelection, saveProgrammeSelection,
+} from "../programme";
 import { C, F, shadowCard } from "../theme";
-import { Text } from "../ui";
+import { Select, Text } from "../ui";
 
 type Metrics = {
   pending_applications: number; ready_to_record: number; progress_pct: number;
@@ -11,24 +15,49 @@ type Metrics = {
 };
 
 export default function Home({
-  user, reloadKey,
+  user, reloadKey, onProgrammeChange,
 }: {
   user: string;
   reloadKey: number;
+  /** Called after the selection changes, so the caller can bump its own
+   *  reloadKey and refetch every other screen the same way pull-to-refresh
+   *  already does. */
+  onProgrammeChange: () => void;
 }) {
   const [m, setM] = useState<Metrics | null>(null);
   const [upcoming, setUpcoming] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [programmes, setProgrammes] = useState<ProgrammeOption[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
-    call<Metrics>("get_home_metrics")
-      .then((d) => { setM(d); setError(null); })
-      .catch((e) => setError((e as Error).message || "Could not load metrics."));
-    // As on the web page, a failure here is silent - the tile just stays blank.
-    call<{ upcoming?: unknown[] }>("get_upcoming_and_overdue")
-      .then((d) => setUpcoming((d?.upcoming ?? []).length))
-      .catch(() => {});
+    // Settle which programme is in force before fetching anything that
+    // depends on it - a selection made after the fact would need a second
+    // round of fetches to take effect.
+    (async () => {
+      await loadProgrammeSelection();
+      let options: ProgrammeOption[] = [];
+      try { options = await call<ProgrammeOption[]>("get_field_programmes"); }
+      catch { /* metrics below still load unscoped if this fails */ }
+      const id = await reconcileProgrammeSelection(options);
+      setProgrammes(options);
+      setSelected(id);
+
+      call<Metrics>("get_home_metrics")
+        .then((d) => { setM(d); setError(null); })
+        .catch((e) => setError((e as Error).message || "Could not load metrics."));
+      // As on the web page, a failure here is silent - the tile just stays blank.
+      call<{ upcoming?: unknown[] }>("get_upcoming_and_overdue")
+        .then((d) => setUpcoming((d?.upcoming ?? []).length))
+        .catch(() => {});
+    })();
   }, [reloadKey]);
+
+  async function switchProgramme(id: string) {
+    await saveProgrammeSelection(id);
+    setSelected(id);
+    onProgrammeChange();
+  }
 
   const pct = m?.progress_pct ?? 0;
 
@@ -36,6 +65,21 @@ export default function Home({
     <View>
       <Text style={s.greeting}>Hello, {user.split("@")[0] || "there"}</Text>
       <Text style={s.greetingSub}>Here's what's happening today.</Text>
+
+      {/* Only shown once there is an actual choice to make - a single-
+          programme farm never sees this. */}
+      {programmes.length > 1 && (
+        <View style={s.progWrap}>
+          <Text style={s.progLabel}>WORKING ON</Text>
+          <Select
+            value={selected ?? programmes[0].name}
+            options={programmes.map((p) => ({
+              value: p.name, label: `${p.name} — ${programmeLabel(p)}`,
+            }))}
+            onChange={switchProgramme}
+          />
+        </View>
+      )}
 
       <View style={s.card}>
         <View style={s.cardHead}>
@@ -80,6 +124,10 @@ function Stat({ label, value }: { label: string; value?: number | null }) {
 const s = StyleSheet.create({
   greeting: { fontFamily: F.semibold, fontSize: 20, color: C.ink, marginTop: 4, marginBottom: 2 },
   greetingSub: { fontFamily: F.regular, fontSize: 13, color: C.inkMute, marginBottom: 20 },
+  progWrap: { marginBottom: 16 },
+  progLabel: {
+    fontFamily: F.medium, fontSize: 11, letterSpacing: 1, color: C.inkMute, marginBottom: 6,
+  },
   card: {
     backgroundColor: C.surface2, borderRadius: 24, paddingVertical: 18,
     paddingHorizontal: 20, marginBottom: 14, ...shadowCard,

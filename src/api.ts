@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_PREFIX } from "./config";
 import { currentInstanceUrl } from "./instance";
+import { withProgramme } from "./programme";
 import * as debug from "./debuglog";
 import { clearSession, currentSession, loadSession, saveSession } from "./auth";
 
@@ -83,13 +84,19 @@ export async function rawCall<T = any>(method: string, args?: object): Promise<T
   return data.message as T;
 }
 
-/** A read. Caches on success; falls back to that cache only when offline. */
+/** A read. Caches on success; falls back to that cache only when offline.
+ *
+ *  The selected fertilizer programme is folded into the args here, once, so
+ *  every screen's call site stays as plain as it already was. It also means
+ *  the cache key naturally includes it: switching programmes while offline
+ *  falls back to that programme's own last-seen data, not the other one's. */
 export async function call<T = any>(method: string, args?: object): Promise<T> {
+  const fullArgs = withProgramme(args);
   try {
-    const message = await rawCall<T>(method, args);
+    const message = await rawCall<T>(method, fullArgs);
     await AsyncStorage.setItem(
       CACHE_PREFIX + method,
-      JSON.stringify({ args: args ?? {}, message })
+      JSON.stringify({ args: fullArgs, message })
     );
     return message;
   } catch (e) {
@@ -98,7 +105,7 @@ export async function call<T = any>(method: string, args?: object): Promise<T> {
       const cached = await AsyncStorage.getItem(CACHE_PREFIX + method);
       if (cached) {
         const c = JSON.parse(cached);
-        if (JSON.stringify(c.args) === JSON.stringify(args ?? {})) {
+        if (JSON.stringify(c.args) === JSON.stringify(fullArgs)) {
           return c.message as T;
         }
       }
@@ -109,13 +116,14 @@ export async function call<T = any>(method: string, args?: object): Promise<T> {
 
 /** A write. Queues for later sync only when the request never left the phone. */
 export async function writeCall<T = any>(method: string, args?: object): Promise<T> {
+  const fullArgs = withProgramme(args);
   try {
-    return await rawCall<T>(method, args);
+    return await rawCall<T>(method, fullArgs);
   } catch (e) {
     const e2 = e as ApiError;
     if (!e2.isNetworkError) throw e;
     const q = await getQueue();
-    q.push({ method, args: args ?? {}, ts: Date.now() });
+    q.push({ method, args: fullArgs, ts: Date.now() });
     await setQueue(q);
     throw err("No connection - saved, will send automatically.", { queued: true });
   }

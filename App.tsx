@@ -16,6 +16,7 @@ import {
   currentInstanceUrl, loadInstanceUrl, looksLikeUrl, saveInstanceUrl,
 } from "./src/instance";
 import { loadSettings, useSettings } from "./src/settings";
+import { saveProgrammeSelection } from "./src/programme";
 import { BOTTOM_NAV, DRAWER, NavState, Plan, PlanMode, TITLES, View as ViewName } from "./src/nav";
 import ApplicatorDetail from "./src/screens/ApplicatorDetail";
 import Attendance from "./src/screens/Attendance";
@@ -70,7 +71,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       {session
-        ? <Shell session={session} onLogout={async () => { await clearSession(); setSession(null); }} />
+        ? <Shell session={session} onLogout={async () => {
+            await clearSession();
+            // The selected programme is a farm-wide choice, not this account's;
+            // the next person to sign in on this phone may belong to a
+            // different farm entirely, and should not inherit it.
+            await saveProgrammeSelection(null);
+            setSession(null);
+          }} />
         : <Login onDone={setSession} />}
     </SafeAreaProvider>
   );
@@ -373,7 +381,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   function body() {
     switch (nav.view) {
       case "home":
-        return <Home user={session.user} reloadKey={reloadKey} />;
+        return <Home user={session.user} reloadKey={reloadKey} onProgrammeChange={bump} />;
       case "blocks":
         return <Blocks key={reloadKey} />;
       case "upcoming":
