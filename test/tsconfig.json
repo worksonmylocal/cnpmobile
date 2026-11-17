@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "lib": [
+      "es2020",
+      "dom"
+    ],
+    "outDir": "../.test-build",
+    "rootDir": "../src",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": []
+  },
+  "files": [
+    "../src/util.ts",
+    "../src/net.ts",
+    "../src/cache.ts",
+    "../src/queue.ts",
+    "../src/overlay.ts",
+    "../src/seed.ts",
+    "../src/syncEngine.ts",
+    "../src/api.ts",
+    "../src/core.ts",
+    "../src/auth.ts",
+    "../src/instance.ts",
+    "../src/config.ts",
+    "../src/debuglog.ts",
+    "../src/programme.ts",
+    "shims.d.ts"
+  ]
+}

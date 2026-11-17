@@ -37,12 +37,14 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function PlanAction({
-  plan, mode, onBack, toast,
+  plan, mode, onBack, toast, section,
 }: {
   plan: Plan;
   mode: PlanMode;
   onBack: () => void;
   toast: (m: string) => void;
+  /** The section this round sits in - the plan itself does not say. */
+  section?: string | null;
 }) {
   if (mode === "status") {
     return (
@@ -55,7 +57,7 @@ export default function PlanAction({
     );
   }
   if (mode === "request") return <RequestForm plan={plan} onBack={onBack} toast={toast} />;
-  return <RecordFlow plan={plan} onBack={onBack} toast={toast} />;
+  return <RecordFlow plan={plan} section={section ?? null} onBack={onBack} toast={toast} />;
 }
 
 /* ------------------------------------------------------------- Request */
@@ -72,10 +74,10 @@ function RequestForm({ plan, onBack, toast }: { plan: Plan; onBack: () => void; 
     if (!ok) return;
     setBusy(true);
     try {
-      const r = await writeCall<{ name: string }>("create_store_request", {
+      const r = await writeCall<{ name: string; already_requested?: boolean }>("create_store_request", {
         block_fertilizer_plan: plan.name, quantity: qty,
-      });
-      toast("Request sent: " + r.name);
+      }, { meta: { block: plan.block, product: productCode(plan), product_name: productName(plan), qty } });
+      toast(r.already_requested ? `You already have a request for this round: ${r.name}` : "Request sent: " + r.name);
       onBack();
     } catch (e) {
       const err = e as Error & { queued?: boolean };
@@ -99,8 +101,9 @@ function RequestForm({ plan, onBack, toast }: { plan: Plan; onBack: () => void; 
 
 /* -------------------------------------------------------------- Record */
 
-function RecordFlow({ plan, onBack, toast }: { plan: Plan; onBack: () => void; toast: (m: string) => void }) {
+function RecordFlow({ plan, section, onBack, toast }: { plan: Plan; section: string | null; onBack: () => void; toast: (m: string) => void }) {
   const [roster, setRoster] = useState<Applicator[] | null>(null);
+  const [rosterFailed, setRosterFailed] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [step, setStep] = useState<"who" | "qty">("who");
   const [search, setSearch] = useState("");
@@ -114,13 +117,13 @@ function RecordFlow({ plan, onBack, toast }: { plan: Plan; onBack: () => void; t
         // that the whole assigned crew applied it.
         setSelected(list.map((a) => a.name));
       })
-      .catch(() => setRoster([]));
+      .catch(() => { setRosterFailed(true); setRoster([]); });
   }, [plan.block]);
 
   if (roster === null) return <Card><Spinner text="Loading applicators…" /></Card>;
 
   if (step === "qty") {
-    return <RecordForm plan={plan} operators={selected} onBack={onBack} toast={toast} />;
+    return <RecordForm plan={plan} section={section} operators={selected} onBack={onBack} toast={toast} />;
   }
 
   if (!roster.length) {
@@ -128,8 +131,9 @@ function RecordFlow({ plan, onBack, toast }: { plan: Plan; onBack: () => void; t
       <Card>
         <CardH3>Who applied this?</CardH3>
         <Empty>
-          No applicators are assigned to {plan.block} yet. Assign some under Manage Team,
-          or continue without selecting anyone.
+          {rosterFailed
+            ? `Couldn't load the crew for ${plan.block} - it isn't saved on this phone yet. You can continue without selecting anyone, or go back and try again with a connection.`
+            : `No applicators are assigned to ${plan.block} yet. Assign some under Manage Team, or continue without selecting anyone.`}
         </Empty>
         <BtnBig label="Continue" kind="warn" onPress={() => setStep("qty")} />
       </Card>
@@ -177,9 +181,9 @@ function RecordFlow({ plan, onBack, toast }: { plan: Plan; onBack: () => void; t
 }
 
 function RecordForm({
-  plan, operators, onBack, toast,
+  plan, section, operators, onBack, toast,
 }: {
-  plan: Plan; operators: string[]; onBack: () => void; toast: (m: string) => void;
+  plan: Plan; section: string | null; operators: string[]; onBack: () => void; toast: (m: string) => void;
 }) {
   const [qty, setQty] = useState(String(plan.total_kg_required ?? ""));
   const [reason, setReason] = useState("");
@@ -205,11 +209,18 @@ function RecordForm({
     if (!ok) return;
     setBusy(true);
     try {
-      // The web page refuses to record against a block the store has not
-      // fully issued - the same guard belongs here.
-      const sr = await call<string | null>("get_issued_request_for_plan", {
-        block_fertilizer_plan: plan.name,
-      });
+      // Refuse to record against a round the store has not fully issued -
+      // recording moves stock, and without the issuing request the server would
+      // issue it a second time. The answer comes from the saved copy, so this
+      // works with no signal; if it was never saved and cannot be fetched, we
+      // say so rather than guess.
+      let sr: string | null;
+      try {
+        sr = await call<string | null>("get_issued_request_for_plan", { block_fertilizer_plan: plan.name });
+      } catch {
+        toast("Can't confirm the store issued this while there's no connection. Connect once, then record it.");
+        return;
+      }
       if (!sr) {
         toast("No fully-issued store request found for this block — check Store Requests before recording.");
         return;
@@ -222,7 +233,7 @@ function RecordForm({
         application_method: method,
         weather_conditions: weather,
         operators,
-      });
+      }, { meta: { section, block: plan.block, product: productCode(plan), product_name: productName(plan) } });
       toast("Application recorded: " + r.name);
       onBack();
     } catch (e) {

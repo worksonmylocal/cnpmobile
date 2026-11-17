@@ -9,7 +9,11 @@ import { ActivityIndicator, Animated, BackHandler, Image, KeyboardAvoidingView, 
 import {
   SafeAreaProvider, useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { call, flushQueue, getQueue, login, writeCall } from "./src/api";
+import { call, login, writeCall } from "./src/api";
+import { cache } from "./src/core";
+import type { ApiError } from "./src/net";
+import { startSync, stopSync, syncNow } from "./src/sync";
+import { useAuthExpired, useSyncState } from "./src/useSync";
 import { clearSession, loadSession, Session } from "./src/auth";
 import { CONN_LABEL, useConnection } from "./src/connection";
 import {
@@ -71,7 +75,17 @@ export default function App() {
   return (
     <SafeAreaProvider>
       {session
-        ? <Shell session={session} onLogout={async () => {
+        ? <Shell session={session}
+            // The server rejected the saved sign-in. Only the session goes: the
+            // saved data, the unsent work and the chosen programme stay, so
+            // signing back in picks up exactly where the person was.
+            onReauth={async () => { await clearSession(); setSession(null); }}
+            onLogout={async () => {
+            // Signing out ends this person's use of the phone: their saved copy
+            // of the farm's data goes with them. Anything they had not yet sent
+            // is deliberately kept - it is theirs, and goes out when they sign
+            // back in.
+            await cache.purge(session.user);
             await clearSession();
             // The selected programme is a farm-wide choice, not this account's;
             // the next person to sign in on this phone may belong to a
@@ -98,6 +112,16 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
   const [showServer, setShowServer] = useState(false);
   const [server, setServer] = useState(currentInstanceUrl());
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  // When the server has asked for a pause, say for how long and hold the
+  // button - tapping again only extends it, and is what locks a crew out.
+  const [waitUntil, setWaitUntil] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (waitUntil <= Date.now()) return;
+    const id = setInterval(() => { tick((n) => n + 1); if (Date.now() >= waitUntil) clearInterval(id); }, 1000);
+    return () => clearInterval(id);
+  }, [waitUntil]);
+  const waitLeft = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
 
   async function saveServer() {
     if (!looksLikeUrl(server)) {
@@ -111,7 +135,7 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
   }
 
   async function submit() {
-    if (busy) return;
+    if (busy || waitLeft > 0) return;
     const email = usr.trim();
     // Catch the empty case here rather than letting the server answer it -
     // a blank submit isn't a failed sign-in, it's a form that isn't filled in.
@@ -125,10 +149,11 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
     setBusy(true); setError(null);
     try { onDone(await login(email, pwd)); }
     catch (e) {
-      const err = e as Error & { isNetworkError?: boolean };
+      const err = e as ApiError;
+      if ((err.kind === "throttled" || err.kind === "cooldown") && err.retryAfterMs) setWaitUntil(Date.now() + err.retryAfterMs);
       // A wrong server address fails exactly like no signal, so say which
       // server was tried and how to change it.
-      setError(err.isNetworkError
+      setError(err.kind === "network"
         ? `Could not reach ${currentInstanceUrl()}. Check your connection, or hold the logo to change the server.`
         : err.message);
     }
@@ -229,7 +254,9 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 
         {error && <Text style={s.error}>{error}</Text>}
 
-        <BtnBig label={busy ? "Signing in…" : "Log in"} kind="ink" onPress={submit} disabled={busy} />
+        <BtnBig
+          label={busy ? "Signing in…" : waitLeft > 0 ? `Try again in ${waitLeft}s` : "Log in"}
+          kind="ink" onPress={submit} disabled={busy || waitLeft > 0} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -237,7 +264,7 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 
 /* ---------------------------------------------------------------- Shell */
 
-function Shell({ session, onLogout }: { session: Session; onLogout: () => void }) {
+function Shell({ session, onLogout, onReauth }: { session: Session; onLogout: () => void; onReauth: () => void }) {
   const [nav, setNav] = useState<NavState>({ view: "home" });
   const [settings] = useSettings();
   const insets = useSafeAreaInsets();
@@ -260,7 +287,9 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
     });
   }, []);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [pending, setPending] = useState(0);
+  const sync = useSyncState();
+  const authExpired = useAuthExpired();
+  const pending = sync.pending;
   const [refreshing, setRefreshing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const roster = useRef<Record<string, Applicator>>({});
@@ -311,19 +340,24 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
 
   const bump = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  const syncPending = useCallback(async () => setPending((await getQueue()).length), []);
-  useEffect(() => { syncPending(); }, [syncPending, reloadKey, nav.view]);
-
-  // The web page's "online" listener plus its 30s interval.
+  // The app keeps its saved copy current and sends waiting work, but never by
+  // polling: it runs when the app opens or returns to the front, when signal
+  // comes back, when something is waiting, and when someone pulls to refresh.
+  // See src/syncEngine.ts. If the server pushes back, it stands down.
   useEffect(() => {
-    const tick = async () => {
-      const n = await flushQueue();
-      if (n) { toast(`${n} pending item${n > 1 ? "s" : ""} synced`); bump(); }
-      syncPending();
-    };
-    const timer = setInterval(tick, 30000);
-    return () => clearInterval(timer);
-  }, [toast, bump, syncPending]);
+    startSync();
+    return () => stopSync();
+  }, []);
+
+  // Tell people when waiting work has gone through.
+  const prevPending = useRef(0);
+  useEffect(() => {
+    if (prevPending.current > 0 && sync.pending === 0 && sync.failed === 0) {
+      toast("Everything you did offline has been sent.");
+      bump();
+    }
+    prevPending.current = sync.pending;
+  }, [sync.pending, sync.failed, toast, bump]);
 
   const headerSub =
     nav.view === "section-plans" ? nav.section ?? "Section"
@@ -334,17 +368,16 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
 
   async function onRefresh() {
     setRefreshing(true);
-    await flushQueue();
-    bump();
-    await syncPending();
-    setRefreshing(false);
+    try { await syncNow(); } finally { bump(); setRefreshing(false); }
   }
 
   /* Record Application: a block with one issued plan skips the product step. */
   async function selectRecordBlock(block: string) {
     try {
       const plans = await call<Plan[]>("get_pending_plans_for_block", { block });
-      const issued = (plans ?? []).filter((p) => p.status === "Issued");
+      // The block is the one just picked: the server's list for a block used to
+      // leave it off, and the record form needs it to find the crew.
+      const issued = (plans ?? []).filter((p) => p.status === "Issued").map((p) => ({ ...p, block }));
       if (issued.length === 1) {
         go({ view: "plan-action", plan: issued[0], planMode: "record", planReturn: "record-block" });
       } else if (issued.length > 1) {
@@ -401,6 +434,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           <>
             <BackLink label="Back" onPress={planBack} />
             <PlanAction plan={nav.plan!} mode={nav.planMode as PlanMode}
+              section={(nav.planReturn === "section-plans" ? nav.section : nav.recordSection) ?? null}
               onBack={planBack} toast={toast} />
           </>
         );
@@ -485,11 +519,10 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         return (
           <Settings
             user={session.user}
-            pending={pending}
             onSync={async () => {
-              const n = await flushQueue();
-              toast(n ? `${n} pending item${n > 1 ? "s" : ""} synced` : "Nothing to sync");
-              bump(); syncPending();
+              await syncNow();
+              toast("Up to date.");
+              bump();
             }}
           />
         );
@@ -528,6 +561,11 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           </Pressable>
         </View>
 
+        <StatusBanner
+          conn={conn} pending={pending} failed={sync.failed} authExpired={authExpired}
+          lastSyncAt={sync.lastSyncAt} busyUntil={sync.busyUntil}
+          onSettings={() => go({ view: "settings" })} onSignIn={onReauth} onRetry={onRefresh} />
+
         {body()}
       </ScrollView>
       </KeyboardAvoidingView>
@@ -560,7 +598,9 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
       <ConfirmDialog
         open={confirmLogout}
         title="Log out?"
-        body={`You are signed in as ${session.user}. You'll need your email and password to get back in.`}
+        body={`You are signed in as ${session.user}. You'll need your email and password to get back in.` +
+          (pending ? `\n\n${pending} thing${pending > 1 ? "s" : ""} you did offline ${pending > 1 ? "haven't" : "hasn't"} been sent yet. ` +
+            `${pending > 1 ? "They" : "It"} will stay on this phone and send when you sign in again.` : "")}
         confirmLabel="Log out"
         onCancel={() => setConfirmLogout(false)}
         onConfirm={() => { setConfirmLogout(false); onLogout(); }}
@@ -575,7 +615,73 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   );
 }
 
+/* ------------------------------------------------------------- Status banner */
+
+const ago = (at: number) => {
+  if (!at) return "";
+  const m = Math.max(0, Math.round((Date.now() - at) / 60000));
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+
+/**
+ * One line, only when something needs saying, in plain words and in the same
+ * place every time. It is what stands in for the red error screens: the app
+ * keeps working and tells you why it is working the way it is.
+ */
+function StatusBanner({
+  conn, pending, failed, authExpired, lastSyncAt, busyUntil, onSettings, onSignIn, onRetry,
+}: {
+  conn: string; pending: number; failed: number; authExpired: boolean; lastSyncAt: number; busyUntil: number;
+  onSettings: () => void; onSignIn: () => void; onRetry: () => void;
+}) {
+  const waiting = pending ? ` ${pending} waiting to send.` : "";
+  const saved = lastSyncAt ? ` Showing what was saved ${ago(lastSyncAt)}.` : "";
+  let tone: "bad" | "warn" | "info" | null = null;
+  let text = "";
+  let action: { label: string; onPress: () => void } | null = null;
+
+  if (authExpired) {
+    tone = "bad";
+    text = "Your sign-in is no longer valid. Nothing you did is lost - sign in again and it will be sent.";
+    action = { label: "Sign in", onPress: onSignIn };
+  } else if (conn === "busy") {
+    tone = "warn";
+    const s = busyUntil ? Math.max(1, Math.round((busyUntil - Date.now()) / 1000)) : 0;
+    text = `The server is busy, so the app is waiting its turn${s ? ` (about ${s < 90 ? s + "s" : Math.round(s / 60) + " min"})` : ""}.${waiting}${saved}`;
+    action = { label: "Try now", onPress: onRetry };
+  } else if (conn === "offline") {
+    tone = "info";
+    text = `No network. Keep working - everything is saved.${waiting}${saved}`;
+  } else if (conn === "noserver") {
+    tone = "warn";
+    text = `Can't reach the server right now. Your work is saved and will send when it answers.${waiting}`;
+    action = { label: "Try now", onPress: onRetry };
+  } else if (failed > 0) {
+    tone = "bad";
+    text = `${failed} thing${failed > 1 ? "s" : ""} couldn't be sent and need${failed > 1 ? "" : "s"} a look.`;
+    action = { label: "Review", onPress: onSettings };
+  } else if (pending > 0) {
+    tone = "info";
+    text = `Sending ${pending} thing${pending > 1 ? "s" : ""} you did earlier…`;
+  }
+  if (!tone) return null;
+
+  const bg = tone === "bad" ? C.badBg : tone === "warn" ? C.warnBg : C.infoBg;
+  const fg = tone === "bad" ? C.bad : tone === "warn" ? C.warn : C.info;
+  return (
+    <View style={[s.banner, { backgroundColor: bg }]} accessibilityRole="alert">
+      <Text style={[s.bannerText, { color: fg }]}>{text}</Text>
+      {action && (
+        <Pressable style={[s.bannerBtn, { borderColor: fg }]} onPress={action.onPress} accessibilityRole="button">
+          <Text style={[s.bannerBtnText, { color: fg }]}>{action.label}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 /* ------------------------------------------------------------ Confirm */
+
 
 /**
  * An in-app confirm, deliberately not Alert.alert: the OS dialog is styled
@@ -863,6 +969,13 @@ const s = StyleSheet.create({
   bnavItemOn: { backgroundColor: C.grey },
   bnavLabel: { fontFamily: F.semibold, fontSize: 10, letterSpacing: 0.2, color: C.inkMute },
   bnavLabelOn: { color: C.ink },
+  banner: {
+    flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14,
+    paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12,
+  },
+  bannerText: { flex: 1, fontFamily: F.medium, fontSize: 12.5, lineHeight: 18 },
+  bannerBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12 },
+  bannerBtnText: { fontFamily: F.semibold, fontSize: 12 },
   toast: {
     position: "absolute", bottom: 28, alignSelf: "center", maxWidth: "90%",
     backgroundColor: C.ink, paddingVertical: 13, paddingHorizontal: 22, borderRadius: 12,

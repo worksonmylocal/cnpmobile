@@ -104,12 +104,12 @@ const LESSONS: Lesson[] = [
     title: "Working without signal",
     where: "Anywhere",
     steps: [
-      "Keep working - what you submit is saved on the phone.",
-      "The header shows how many items are waiting to sync.",
-      "They send themselves when signal returns.",
-      "The dot in the corner tells you where you stand.",
+      "Keep working - everything you do is saved on the phone, and the screens you have opened before still work.",
+      "Requests, recorded applications and attendance are sent by themselves when signal returns, dated the day you did them.",
+      "The bar at the top says when something is waiting, and Settings lists anything that could not be sent.",
+      "The dot in the corner tells you where you stand - tap it to check.",
     ],
-    tip: "Grey dot means no network. Red means there is signal but the server is not answering, so walking around will not help.",
+    tip: "Grey dot: no network. Amber: the server is busy and the app is waiting its turn - nothing is wrong with your phone. Red: there is signal but the server is not answering.",
   },
 ];
 

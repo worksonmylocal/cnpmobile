@@ -92,10 +92,11 @@ export type PillKind = "good" | "bad" | "warn" | "info" | "mute";
  * without becoming decoration, and it carries a ring so it still reads on a
  * white card for anyone who cannot separate the colours.
  */
-export function StatusDot({ state }: { state: "online" | "offline" | "noserver" | "checking" }) {
+export function StatusDot({ state }: { state: "online" | "offline" | "busy" | "noserver" | "checking" }) {
   const colour = {
     online: C.good,
     offline: C.inkFaint,
+    busy: C.warn,
     noserver: C.bad,
     checking: C.warn,
   }[state];

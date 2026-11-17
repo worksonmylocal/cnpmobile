@@ -19,7 +19,7 @@ export default function ApplicatorDetail({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    call<Stats[]>("get_operator_activity", { employees: [applicator.name], group_by: "operator" })
+    call<Stats[]>("get_operator_activity", { employees: [applicator.name], group_by: "operator", recorded_by_me: 1 })
       .then((d) => setStats((d ?? [])[0] ?? null))
       .catch(() => setStats(null));
   }, [applicator.name]);

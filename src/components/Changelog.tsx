@@ -21,7 +21,7 @@ import { Text } from "../ui";
  * changed in the code.
  */
 
-const CHANGELOG_VERSION = "1.2.0";
+const CHANGELOG_VERSION = "1.2.1";
 const SEEN_KEY = "cnp_changelog_seen";
 const { width: SW } = Dimensions.get("window");
 
@@ -36,6 +36,30 @@ type Entry = {
 };
 
 const ENTRIES: Entry[] = [
+  {
+    id: "offline",
+    tag: "New", accent: "#22C55E", bg: "#022C22", icon: "download-cloud",
+    title: "Works with no signal",
+    body: "The app now keeps its own copy of your sections, blocks, rounds and team. Open any screen, request fertilizer, record an application or mark attendance with no signal at all - it is all saved on the phone and sent by itself when signal returns, on the day you did it.",
+  },
+  {
+    id: "busy",
+    tag: "Improved", accent: "#F59E0B", bg: "#1C0A00", icon: "clock",
+    title: "No more locked out",
+    body: "If the server is busy the app now waits its turn instead of showing an error, keeps working from what it has saved, and tells you what is happening in a bar at the top. It also asks the server far less often, and it never signs you out because of a slow moment.",
+  },
+  {
+    id: "mine",
+    tag: "Improved", accent: "#38BDF8", bg: "#0C1A2E", icon: "user",
+    title: "Your own requests and records",
+    body: "Store Requests, the applications you recorded and your daily counts now show only your own work, not everyone's on the farm.",
+  },
+  {
+    id: "crew",
+    tag: "Fixed", accent: "#A78BFA", bg: "#0F172A", icon: "users",
+    title: "Recording finds the block's crew",
+    body: "Recording an application from Record now shows the block it is for and loads that block's crew, which it sometimes missed before."
+  },
   {
     id: "server",
     tag: "New", accent: "#6366F1", bg: "#12101E", icon: "server",

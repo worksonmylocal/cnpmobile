@@ -91,8 +91,14 @@ export async function reconcileProgrammeSelection(
  *  absent, same as every other optional filter they already take - so a
  *  single-programme farm is completely unaffected by this existing at all. */
 export function withProgramme<T extends object>(args?: T): T & { programme?: string } {
-  if (!cached) return (args ?? {}) as T & { programme?: string };
-  return { ...(args ?? {}), programme: cached } as T & { programme?: string };
+  return foldProgramme(cached, args);
+}
+
+/** The same fold for a programme other than the selected one - used when the
+ *  app fills its offline copy for every programme, not just the open one. */
+export function foldProgramme<T extends object>(programme: string | null | undefined, args?: T): T & { programme?: string } {
+  if (!programme) return (args ?? {}) as T & { programme?: string };
+  return { ...(args ?? {}), programme } as T & { programme?: string };
 }
 
 export function useProgrammeState(): [string | null, ProgrammeOption[]] {

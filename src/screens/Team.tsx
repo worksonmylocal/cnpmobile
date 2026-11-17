@@ -26,11 +26,13 @@ export default function Team({
 
   async function setAttendance(employee: string, status: string) {
     try {
-      await writeCall("mark_attendance", { employee, status });
+      await writeCall("mark_attendance", { employee, status }, { meta: { name: employee } });
       toast(status + " marked");
       reload();
     } catch (e) {
-      toast((e as Error).message);
+      const err = e as Error & { queued?: boolean };
+      toast(err.message);
+      if (err.queued) reload();     // saved - the screen already shows it
     }
   }
 

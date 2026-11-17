@@ -7,18 +7,28 @@ import {
   FONT_MAX, FONT_MIN, FONT_STEP, Settings as S, fs, isOwner, useSettings,
 } from "../settings";
 import { CONN_DETAIL, CONN_LABEL, pingServer, useConnection } from "../connection";
+import { currentUser, net, queue } from "../core";
+import { describeItem, useQueueItems } from "../queueView";
+import { useSyncState } from "../useSync";
 import { currentInstanceUrl } from "../instance";
 import * as debug from "../debuglog";
 import { BtnBig, Card, CardH3, Meta, Text } from "../ui";
 
+const ago = (at: number) => {
+  if (!at) return "not yet";
+  const m = Math.max(0, Math.round((Date.now() - at) / 60000));
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+
 export default function Settings({
-  user, pending, onSync,
+  user, onSync,
 }: {
   user: string;
-  pending: number;
   onSync: () => void;
 }) {
   const [set, update, reset] = useSettings();
+  const sync = useSyncState();
+  const { pending, failed } = useQueueItems();
 
   const stepFont = (by: number) => {
     const next = Math.min(FONT_MAX, Math.max(FONT_MIN, set.fontScale + by));
@@ -90,11 +100,48 @@ export default function Settings({
         <CardH3>This device</CardH3>
         <Meta>Signed in as {user}</Meta>
         <Meta style={{ marginBottom: 12 }}>
-          {pending
-            ? `${pending} item${pending > 1 ? "s" : ""} waiting to sync`
-            : "Everything is synced"}
+          Saved data updated {ago(sync.lastSyncAt)}.{" "}
+          {pending.length
+            ? `${pending.length} thing${pending.length > 1 ? "s" : ""} waiting to send.`
+            : "Everything you did has been sent."}
         </Meta>
-        {pending > 0 && <BtnBig label="Sync pending items now" kind="warn" onPress={onSync} />}
+
+        {pending.map((i) => (
+          <View key={i.id} style={s.qRow}>
+            <Text style={s.qText}>{describeItem(i)}</Text>
+            <Text style={s.qSub}>
+              {i.date}{i.attempts ? ` · tried ${i.attempts}×` : ""}{i.error ? ` · ${i.error}` : ""}
+            </Text>
+          </View>
+        ))}
+
+        {failed.length > 0 && (
+          <>
+            <Text style={s.failHead}>Couldn't be sent</Text>
+            <Meta style={{ marginBottom: 6 }}>
+              The server turned these down, so retrying as they are won't help. Check the reason, then retry or discard each one.
+            </Meta>
+            {failed.map((i) => (
+              <View key={i.id} style={s.qRow}>
+                <Text style={s.qText}>{describeItem(i)}</Text>
+                <Text style={[s.qSub, { color: C.bad }]}>{i.error || "Not accepted"}</Text>
+                <View style={s.qBtns}>
+                  <Pressable style={s.qBtn} onPress={() => { const u = currentUser(); if (u) queue.retryFailed(u, i.id).then(onSync); }}>
+                    <Text style={s.qBtnText}>Retry</Text>
+                  </Pressable>
+                  <Pressable style={s.qBtn} onPress={() => queue.remove(i.id)}>
+                    <Text style={[s.qBtnText, { color: C.bad }]}>Discard</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+
+        <BtnBig
+          label={sync.syncing ? "Syncing…" : pending.length ? `Send ${pending.length} now and refresh` : "Refresh now"}
+          kind={pending.length ? "warn" : "grey"} onPress={onSync} disabled={sync.syncing}
+        />
         <BtnBig label="Reset display settings" kind="grey" onPress={reset} />
       </Card>
 
@@ -109,6 +156,7 @@ export default function Settings({
 
 function Diagnostics() {
   const [conn, recheck] = useConnection();
+  const sync = useSyncState();
   const [entries, setEntries] = useState(debug.snapshot());
   const [ping, setPing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,7 +184,14 @@ function Diagnostics() {
           <View style={[s.connDot, { backgroundColor: CONN_COLOUR[conn] }]} />
           <Text style={s.connLabel}>{CONN_LABEL[conn]}</Text>
         </View>
-        <Meta style={{ marginBottom: 12 }}>{CONN_DETAIL[conn]}</Meta>
+        <Meta style={{ marginBottom: 6 }}>{CONN_DETAIL[conn]}</Meta>
+        <Meta style={{ marginBottom: 12 }}>
+          {net.cooldownMs() > 0
+            ? `Waiting ${Math.round(net.cooldownMs() / 1000)}s before asking again. `
+            : ""}
+          {net.lastFailKind ? `Last problem: ${net.lastFailKind}.` : "No problems seen."}
+          {sync.bootstrapUnsupported ? " This server has no one-call refresh yet." : ""}
+        </Meta>
         <BtnBig label={busy ? "Pinging…" : "Ping server"} kind="grey"
           onPress={doPing} disabled={busy} />
         {ping && <Meta style={{ marginTop: 10 }}>{ping}</Meta>}
@@ -166,7 +221,7 @@ function Diagnostics() {
 }
 
 const CONN_COLOUR: Record<string, string> = {
-  online: C.good, offline: C.inkFaint, noserver: C.bad, checking: C.warn,
+  online: C.good, offline: C.inkFaint, busy: C.warn, noserver: C.bad, checking: C.warn,
 };
 const LEVEL_COLOUR: Record<string, string> = {
   info: C.inkMute, warn: C.warn, error: C.bad,
@@ -285,6 +340,13 @@ function Toggle({
 }
 
 const s = StyleSheet.create({
+  qRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: C.hairline },
+  qText: { fontFamily: F.medium, fontSize: 13, color: C.ink3 },
+  qSub: { fontFamily: F.regular, fontSize: 11.5, color: C.inkMute, marginTop: 2, lineHeight: 16 },
+  qBtns: { flexDirection: "row", gap: 10, marginTop: 6 },
+  qBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: C.grey },
+  qBtnText: { fontFamily: F.semibold, fontSize: 12, color: C.ink3 },
+  failHead: { fontFamily: F.semibold, fontSize: 13, color: C.bad, marginTop: 14 },
   connRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, marginBottom: 4 },
   connDot: { width: 10, height: 10, borderRadius: 5 },
   connLabel: { fontFamily: F.semibold, fontSize: 13, color: C.ink3 },

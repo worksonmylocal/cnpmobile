@@ -7,6 +7,7 @@ import {
 } from "../programme";
 import { C, F, shadowCard } from "../theme";
 import { Select, Text } from "../ui";
+import { useLoad } from "../useLoad";
 
 type Metrics = {
   pending_applications: number; ready_to_record: number; progress_pct: number;
@@ -24,34 +25,33 @@ export default function Home({
    *  already does. */
   onProgrammeChange: () => void;
 }) {
-  const [m, setM] = useState<Metrics | null>(null);
-  const [upcoming, setUpcoming] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [programmes, setProgrammes] = useState<ProgrammeOption[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
-    // Settle which programme is in force before fetching anything that
-    // depends on it - a selection made after the fact would need a second
-    // round of fetches to take effect.
+    // Settle which programme is in force before reading anything that depends
+    // on it - a selection made after the fact would need a second round.
     (async () => {
       await loadProgrammeSelection();
       let options: ProgrammeOption[] = [];
       try { options = await call<ProgrammeOption[]>("get_field_programmes"); }
-      catch { /* metrics below still load unscoped if this fails */ }
+      catch { /* the figures below still load unscoped if this fails */ }
       const id = await reconcileProgrammeSelection(options);
       setProgrammes(options);
       setSelected(id);
-
-      call<Metrics>("get_home_metrics")
-        .then((d) => { setM(d); setError(null); })
-        .catch((e) => setError((e as Error).message || "Could not load metrics."));
-      // As on the web page, a failure here is silent - the tile just stays blank.
-      call<{ upcoming?: unknown[] }>("get_upcoming_and_overdue")
-        .then((d) => setUpcoming((d?.upcoming ?? []).length))
-        .catch(() => {});
+      setSettled(true);
     })();
   }, [reloadKey]);
+
+  // Read from the saved copy (and refreshed only when it has grown old), so
+  // opening Home costs the server nothing most of the time and works with no
+  // signal at all.
+  const metrics = useLoad<Metrics>("get_home_metrics", undefined, [selected, settled, reloadKey]);
+  const upcomingRes = useLoad<{ upcoming?: unknown[] }>("get_upcoming_and_overdue", undefined, [selected, settled, reloadKey]);
+  const m = metrics.data;
+  const error = !m ? metrics.error : null;
+  const upcoming = upcomingRes.data ? (upcomingRes.data.upcoming ?? []).length : null;
 
   async function switchProgramme(id: string) {
     await saveProgrammeSelection(id);
@@ -103,9 +103,9 @@ export default function Home({
       <View style={s.statGrid}>
         <Stat label="PENDING APPLICATIONS" value={m?.pending_applications} />
         <Stat label="READY TO RECORD" value={m?.ready_to_record} />
-        <Stat label="PENDING STORE REQUESTS" value={m?.pending_requests} />
+        <Stat label="MY STORE REQUESTS" value={m?.pending_requests} />
         <Stat label="RECORDED BY YOU" value={m?.my_applications} />
-        <Stat label="APPLICATIONS TODAY" value={m?.applications_today} />
+        <Stat label="RECORDED TODAY" value={m?.applications_today} />
         <Stat label="UPCOMING BLOCKS" value={upcoming} />
       </View>
     </View>
