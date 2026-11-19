@@ -224,3 +224,14 @@ test("parts the server left out are not seeded, so nothing is overwritten with n
   const seeds = seedsFromBootstrap({ home: null, upcoming: undefined, errors: { home: "x" } }, (a) => a || {});
   assert.equal(seeds.length, 0);
 });
+
+test("programmeLabel marks a micro-element programme so it is not mistaken for the main one", () => {
+  const { programmeLabel } = require("../.test-build/programme");
+  assert.equal(
+    programmeLabel({ name: "FP-1", season: "2025/2026", farm: "Lokitela", crop: "Hass", period_type: "Custom Period",
+      start_month: "August", end_month: "August", programme_type: "Micro", single_product: "BORAX" }),
+    "Micro · BORAX · Aug");
+  assert.equal(
+    programmeLabel({ name: "FP-2", season: "2025/2026", farm: "Lokitela", crop: "Hass", period_type: "Full Year" }),
+    "2025/2026 · Full year");
+});

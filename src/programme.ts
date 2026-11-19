@@ -24,6 +24,9 @@ export type ProgrammeOption = {
   period_type: string;
   start_month?: string;
   end_month?: string;
+  /** "Micro" for a micro-element round (e.g. Borax); absent or "Standard" otherwise. */
+  programme_type?: string;
+  single_product?: string | null;
 };
 
 const KEY = "cnp_selected_programme";
@@ -42,6 +45,12 @@ export function currentProgramme(): string | null {
 }
 
 export function programmeLabel(p: ProgrammeOption): string {
+  // A micro-element programme says so, with what it is and when - so nobody
+  // takes a Borax round for part of the main programme.
+  if (p.programme_type === "Micro") {
+    const month = p.start_month ? ` · ${p.start_month.slice(0, 3)}` : "";
+    return `Micro · ${p.single_product || "micro-element"}${month}`;
+  }
   const period = p.period_type === "Custom Period" && p.start_month && p.end_month
     ? `${p.start_month.slice(0, 3)}–${p.end_month.slice(0, 3)}`
     : "Full year";
