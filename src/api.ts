@@ -61,6 +61,7 @@ const INVALIDATES: Record<string, string[]> = {
   add_applicators: ["get_my_applicators_by_section", "get_attendance_by_block", "get_applicators_for_block", "get_available_employees_for_team"],
   add_applicator: ["get_my_applicators_by_section", "get_attendance_by_block", "get_applicators_for_block", "get_available_employees_for_team"],
   remove_applicator: ["get_my_applicators_by_section", "get_attendance_by_block", "get_applicators_for_block", "get_available_employees_for_team"],
+  request_correction: ["get_correctable", "get_my_corrections"],
   assign_block: ["get_my_applicators_by_section", "get_attendance_by_block", "get_applicators_for_block"],
 };
 

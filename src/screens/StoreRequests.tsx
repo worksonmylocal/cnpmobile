@@ -8,7 +8,7 @@ import { useLoad } from "../useLoad";
 
 type Req = {
   name?: string; block?: string; status: string; date?: string; waiting?: boolean;
-  fertilizer_product?: string; fertilizer_product_name?: string;
+  fertilizer_product?: string; fertilizer_product_name?: string; corrected?: boolean;
 };
 
 const pillFor = (s: string): PillKind =>
@@ -48,7 +48,10 @@ export default function StoreRequests() {
               {r.date ? ` · ${r.date}` : ""}
             </Text>
           </View>
-          <Pill kind={pillFor(r.status)}>{r.status}</Pill>
+          <View style={{ alignItems: "flex-end", gap: 4 }}>
+            <Pill kind={pillFor(r.status)}>{r.status}</Pill>
+            {r.corrected ? <Pill kind="info">corrected</Pill> : null}
+          </View>
         </View>
       ))}
     </View>

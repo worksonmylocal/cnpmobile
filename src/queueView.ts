@@ -11,6 +11,7 @@ export function describeItem(i: QItem): string {
     case "create_store_request": return `Store request${m.product_name ? " for " + m.product_name : ""}${where}`;
     case "record_application": return `Application recorded${m.product_name ? " - " + m.product_name : ""}${where}`;
     case "add_applicators": return `Added ${Array.isArray(i.args.employees) ? i.args.employees.length : ""} applicator(s) to the team`;
+    case "request_correction": return `Correction request${m.product_name ? " - " + m.product_name : ""}${where}`;
     case "remove_applicator": return "Removed an applicator from the team";
     case "assign_block": return "Changed an applicator's block";
     default: return i.method.replace(/_/g, " ");

@@ -45,6 +45,8 @@ export const TTL_MS: Record<string, number> = {
   get_my_applicators_by_section: 120_000,
   get_attendance_by_block: 120_000,
   get_applicators_for_block: 180_000,
+  get_correctable: 60_000,
+  get_my_corrections: 30_000,
   get_all_sections: 3_600_000,
   get_blocks_in_section: 3_600_000,
   get_field_programmes: 1_800_000,

@@ -235,3 +235,9 @@ test("programmeLabel marks a micro-element programme so it is not mistaken for t
     programmeLabel({ name: "FP-2", season: "2025/2026", farm: "Lokitela", crop: "Hass", period_type: "Full Year" }),
     "2025/2026 · Full year");
 });
+
+test("correction requests are cached briefly and their status refreshes quickly", () => {
+  const { ttlFor } = require("../.test-build/cache");
+  assert.equal(ttlFor("get_my_corrections"), 30000);
+  assert.equal(ttlFor("get_correctable"), 60000);
+});

@@ -527,7 +527,7 @@ function Shell({ session, onLogout, onReauth }: { session: Session; onLogout: ()
           />
         );
       case "correction":
-        return <Correction />;
+        return <Correction toast={toast} />;
     }
   }
 
